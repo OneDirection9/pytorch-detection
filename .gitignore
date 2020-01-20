@@ -1,3 +1,15 @@
+# Pycharm added
+.idea/
+
+# Tests outputs
+tests/outputs/
+
+# Experiments folder
+experiments
+
+# Subfolder in data folder
+data/*/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

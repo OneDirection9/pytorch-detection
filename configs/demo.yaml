@@ -1,0 +1,37 @@
+dataset:
+  train:
+    name: CocoDetection
+    root: ./data/MSCOCO/train2014
+    ann_file: ./data/MSCOCO/annotations/instances_train2014.json
+    transform:
+      name: FasterRCNNTrainTransform
+
+  test: # [optional]: no evaluation when not provided
+    name: CocoDetection
+    root: ./data/MSCOCO/val2014
+    ann_file: ./data/MSCOCO/annotations/instances_val2014.json
+    transform:
+      name: FasterRCNNValTransform
+
+dataloader:
+  images_per_gpu: 2
+  num_workers: 4
+
+model:
+  name: FasterRCNN
+  backbone:
+    name: ResNet
+    depth: 50
+  neck:
+    name: FPN
+  proposal_head:
+    name: RPN
+    anchor_generator:
+      name: StandardAnchorGenerator
+  roi_head:
+    name: ROIHead
+  device: cuda
+
+cudnn_benchmark: False
+output_dir: ./experiments/demo
+seed: 1234

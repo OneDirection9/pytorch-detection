@@ -1,0 +1,40 @@
+rpn.py:
+        ag = StandardAnchorGenerator([16],[[32, 64, 128, 256, 512]], [[0.5, 1.0, 2.0]], 0)
+        rpn = MRPN(ag, in_channels=1024, pre_nms_topk={'training':12000, 'testing':6000}, post_nms_topk={'training':2000, 'testing': 1000}).cuda()
+        my_proposals, my_losses = rpn(images.image_sizes, (features, pred_objectness_logits, pred_anchor_deltas), [x.tensor for x in gt_boxes])
+
+        compare_proposal = [torch.nonzero(my_pro[:, :4] != pro.proposal_boxes.tensor).numel() for my_pro, pro in zip(my_proposals, proposals)]
+        print('compare proposal: {}'.format(compare_proposal))
+
+        compare_score = [torch.nonzero(my_pro[:, 4] != pro.objectness_logits).numel() for my_pro, pro in zip(my_proposals, proposals)]
+        print('compare score: {}'.format(compare_score))
+        print('losses: {}'.format(losses))
+        print('my_losses: {}'.format(my_losses))
+
+roi_heads:
+        my_proposals = [x.proposal_boxes.tensor for x in proposals]
+        my_logits = [x.objectness_logits for x in proposals]
+        my_proposals = [torch.cat([x, y.unsqueeze(1)], dim=1) for x, y in zip(my_proposals, my_logits)]
+        my_boxes = [x.tensor for x in gt_boxes]
+        my_labels = [x.gt_classes for x in targets]
+        my_roi_head = det.models.ROIHead()
+        my_res = my_roi_head.label_and_sample_proposals(my_proposals, my_boxes, my_labels)
+
+        cmp_proposal_boxes, cmp_logits, cmp_gt_labels, cmp_gt_boxes = [], [], [], []
+        for x, y in zip(my_res, proposals_with_gt):
+            cmp_proposal_boxes.append(
+                torch.nonzero(x['proposals'][:, :4] != y.proposal_boxes.tensor).numel()
+            )
+            cmp_logits.append(
+                torch.nonzero(x['proposals'][:, 4] != y.objectness_logits).numel()
+            )
+            cmp_gt_labels.append(
+                torch.nonzero(x['gt_labels'] != y.gt_classes).numel()
+            )
+            cmp_gt_boxes.append(
+                torch.nonzero(x['gt_bboxes'] != y.gt_boxes.tensor).numel()
+            )
+        print(cmp_proposal_boxes)
+        print(cmp_logits)
+        print(cmp_gt_labels)
+        print(cmp_gt_boxes)
