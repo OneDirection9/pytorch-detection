@@ -63,27 +63,11 @@ class StandardAnchorGenerator(nn.Module):
 
     def __init__(
         self,
-        strides=(
-            4,
-            8,
-            16,
-            32,
-            64,
-        ),
-        sizes=(
-            (32,),
-            (64,),
-            (128,),
-            (256,),
-            (512,),
-        ),
-        aspect_ratios=((
-            0.5,
-            1.0,
-            2.0,
-        ),),
+        strides=(4, 8, 16, 32, 64,),
+        sizes=((32,), (64,), (128,), (256,), (512,),),
+        aspect_ratios=((0.5, 1.0, 2.0,),),
         offset=0.0
-    ):
+    ):  # yapf: disable
         super(StandardAnchorGenerator, self).__init__()
 
         assert 0. <= offset < 1, offset
