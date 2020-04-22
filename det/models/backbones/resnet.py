@@ -1,9 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
 #
 # Modified by: Zhipeng Han
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 from torch import nn
 from torch.nn.modules.batchnorm import _BatchNorm
@@ -23,8 +21,16 @@ def conv3x3(in_planes, out_planes, stride=1, dilation=1, groups=1):
             = (in + 2 * dilation - (3 - 1) * dilation - 1) / stride + 1
             = (in - 1) / stride + 1
     """
-    return nn.Conv2d(in_planes, out_planes, 3, stride=stride, padding=dilation,
-                     dilation=dilation, groups=groups, bias=False)
+    return nn.Conv2d(
+        in_planes,
+        out_planes,
+        3,
+        stride=stride,
+        padding=dilation,
+        dilation=dilation,
+        groups=groups,
+        bias=False
+    )
 
 
 def conv1x1(in_planes, out_planes, stride=1):
@@ -50,14 +56,21 @@ class BasicBlock(nn.Module):
             Not used. Default: ``True``
     """
 
-    def __init__(self, in_channels, out_channels, bottleneck_channels, stride=1,
-                 dilation=1, groups=1, norm='BN', is_msra=True):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        bottleneck_channels,
+        stride=1,
+        dilation=1,
+        groups=1,
+        norm='BN',
+        is_msra=True
+    ):
         super(BasicBlock, self).__init__()
 
         if out_channels != bottleneck_channels:
-            raise ValueError(
-                'BasicBlock only supports out_channels == bottleneck_channels'
-            )
+            raise ValueError('BasicBlock only supports out_channels == bottleneck_channels')
         if groups != 1:
             raise ValueError('BasicBlock only supports groups=1')
         if not is_msra:
@@ -113,8 +126,17 @@ class Bottleneck(nn.Module):
             ResNet or second conv layer for C2 and Torch Models. Default: ``True``
     """
 
-    def __init__(self, in_channels, out_channels, bottleneck_channels, stride=1,
-                 dilation=1, groups=1, norm='BN', is_msra=True):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        bottleneck_channels,
+        stride=1,
+        dilation=1,
+        groups=1,
+        norm='BN',
+        is_msra=True
+    ):
         super(Bottleneck, self).__init__()
 
         if stride != 1 or in_channels != out_channels:
@@ -136,8 +158,13 @@ class Bottleneck(nn.Module):
         self.conv1 = conv1x1(in_channels, bottleneck_channels, conv1_stride)
         self.norm1 = get_norm(norm, bottleneck_channels)
 
-        self.conv2 = conv3x3(bottleneck_channels, bottleneck_channels, conv2_stride,
-                             dilation=dilation, groups=groups)
+        self.conv2 = conv3x3(
+            bottleneck_channels,
+            bottleneck_channels,
+            conv2_stride,
+            dilation=dilation,
+            groups=groups
+        )
         self.norm2 = get_norm(norm, bottleneck_channels)
 
         self.conv3 = conv1x1(bottleneck_channels, out_channels)
@@ -207,10 +234,22 @@ class ResNet(nn.Module):
         152: (Bottleneck, (3, 8, 36, 3)),
     }
 
-    def __init__(self, depth, in_channels=3, stem_out_channels=64, res2_out_channels=256,
-                 num_classes=None, out_features=('res2', 'res3', 'res4', 'res5'),
-                 freeze_stages=0, groups=1, base_width_per_group=64, norm='BN',
-                 norm_eval=True, is_msra=True, zero_init_residual=True):
+    def __init__(
+        self,
+        depth,
+        in_channels=3,
+        stem_out_channels=64,
+        res2_out_channels=256,
+        num_classes=None,
+        out_features=('res2', 'res3', 'res4', 'res5'),
+        freeze_stages=0,
+        groups=1,
+        base_width_per_group=64,
+        norm='BN',
+        norm_eval=True,
+        is_msra=True,
+        zero_init_residual=True
+    ):
         super(ResNet, self).__init__()
 
         self._depth = depth
@@ -249,8 +288,15 @@ class ResNet(nn.Module):
             num_blocks = stage_blocks[idx]
             stride = 1 if idx == 0 else 2
             dilation = 1
-            stage = self.make_stage(block_class, num_blocks, in_channels, out_channels,
-                                    bottleneck_channels, stride=stride, dilation=dilation)
+            stage = self.make_stage(
+                block_class,
+                num_blocks,
+                in_channels,
+                out_channels,
+                bottleneck_channels,
+                stride=stride,
+                dilation=dilation
+            )
             name = 'res{}'.format(stage_idx)
             self.add_module(name, stage)
             self._res_layer_names.append(name)
@@ -274,15 +320,28 @@ class ResNet(nn.Module):
         self.reset_parameters()
         self.freeze()
 
-    def make_stage(self, block_class, num_blocks, in_channels, out_channels,
-                   bottleneck_channels, stride=1, dilation=1):
+    def make_stage(
+        self,
+        block_class,
+        num_blocks,
+        in_channels,
+        out_channels,
+        bottleneck_channels,
+        stride=1,
+        dilation=1
+    ):
         blocks = []
         for i in range(num_blocks):
             stride = stride if i == 0 else 1
             blocks.append(
                 block_class(
-                    in_channels, out_channels, bottleneck_channels, stride=stride,
-                    dilation=dilation, groups=self._groups, norm=self._norm,
+                    in_channels,
+                    out_channels,
+                    bottleneck_channels,
+                    stride=stride,
+                    dilation=dilation,
+                    groups=self._groups,
+                    norm=self._norm,
                     is_msra=self._is_msra,
                 )
             )

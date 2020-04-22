@@ -1,9 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 #
 # Modified by: Zhipeng Han
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 from torch import nn
 from torch.nn import functional as F
@@ -56,8 +54,9 @@ class FPN(nn.Module):
         https://arxiv.org/abs/1612.03144
     """
 
-    def __init__(self, in_channels=(256, 512, 1024, 2048), out_channels=256,
-                 top_block='rcnn', norm=None):
+    def __init__(
+        self, in_channels=(256, 512, 1024, 2048), out_channels=256, top_block='rcnn', norm=None
+    ):
         super(FPN, self).__init__()
 
         self._in_levels = len(in_channels)
@@ -68,8 +67,7 @@ class FPN(nn.Module):
         bias = norm is None
         for channels in in_channels:
             lateral_conv = nn.Conv2d(channels, out_channels, 1, bias=bias)
-            output_conv = nn.Conv2d(out_channels, out_channels, 3, stride=1, padding=1,
-                                    bias=bias)
+            output_conv = nn.Conv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=bias)
             if norm is not None:
                 lateral_conv = nn.Sequential(lateral_conv, get_norm(norm, out_channels))
                 output_conv = nn.Sequential(output_conv, get_norm(norm, out_channels))
@@ -90,7 +88,10 @@ class FPN(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 weight_init.kaiming_uniform_init(
-                    m, a=1, mode='fan_in', nonlinearity='leaky_relu',
+                    m,
+                    a=1,
+                    mode='fan_in',
+                    nonlinearity='leaky_relu',
                 )
 
     def forward(self, x):
@@ -105,8 +106,7 @@ class FPN(nn.Module):
         assert len(x) == self._in_levels
 
         # Build laterals
-        laterals = [lateral_conv(x[i])
-                    for i, lateral_conv in enumerate(self.lateral_convs)]
+        laterals = [lateral_conv(x[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
 
         # Build top-down path
         for i in range(self._in_levels - 1, 0, -1):

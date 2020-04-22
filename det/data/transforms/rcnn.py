@@ -1,6 +1,4 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import random
 
@@ -34,8 +32,15 @@ class FasterRCNNTrainTransform(object):
             (58.395, 57.12, 57.375)
     """
 
-    def __init__(self, short=600, max_size=1000, size_divisor=32, flip_p=0.5,
-                 mean=(123.675, 116.28, 103.53), std=(58.395, 57.12, 57.375)):
+    def __init__(
+        self,
+        short=600,
+        max_size=1000,
+        size_divisor=32,
+        flip_p=0.5,
+        mean=(123.675, 116.28, 103.53),
+        std=(58.395, 57.12, 57.375)
+    ):
         self._short = short
         self._max_size = max_size
         self._size_divisor = size_divisor
@@ -62,7 +67,8 @@ class FasterRCNNTrainTransform(object):
             short = self._short
 
         image = tfr.image.resize_short_within(
-            image, short, self._max_size, self._size_divisor, cv2.INTER_LINEAR)
+            image, short, self._max_size, self._size_divisor, cv2.INTER_LINEAR
+        )
         h, w, _ = image.shape
         bboxes = tfr.bbox.resize(bboxes, (ori_h, ori_w), (h, w))
 
@@ -100,8 +106,14 @@ class FasterRCNNValTransform(object):
             (58.395, 57.12, 57.375)
     """
 
-    def __init__(self, short=600, max_size=1000, size_divisor=32,
-                 mean=(123.675, 116.28, 103.53), std=(58.395, 57.12, 57.375)):
+    def __init__(
+        self,
+        short=600,
+        max_size=1000,
+        size_divisor=32,
+        mean=(123.675, 116.28, 103.53),
+        std=(58.395, 57.12, 57.375)
+    ):
         self._short = short
         self._max_size = max_size
         self._size_divisor = size_divisor
@@ -122,7 +134,8 @@ class FasterRCNNValTransform(object):
 
         # Resize shorter edge
         image = tfr.image.resize_short_within(
-            image, self._short, self._max_size, self._size_divisor, cv2.INTER_LINEAR)
+            image, self._short, self._max_size, self._size_divisor, cv2.INTER_LINEAR
+        )
         h, w, _ = image.shape
         if bboxes is not None:
             bboxes = tfr.bbox.resize(bboxes, (ori_h, ori_w), (h, w))

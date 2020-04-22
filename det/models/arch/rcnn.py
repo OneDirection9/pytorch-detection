@@ -1,9 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
 #
 # Modified by: Zhipeng Han
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import torch
 from torch import nn
@@ -25,8 +23,7 @@ class FasterRCNN(nn.Module):
         https://arxiv.org/abs/1506.01497
     """
 
-    def __init__(self, backbone, neck=None, proposal_head=None, roi_head=None,
-                 device='cuda'):
+    def __init__(self, backbone, neck=None, proposal_head=None, roi_head=None, device='cuda'):
         super(FasterRCNN, self).__init__()
 
         self.backbone = backbone
@@ -53,9 +50,7 @@ class FasterRCNN(nn.Module):
         # Generate proposals
         if self.proposal_head is not None:
             image_sizes = [item['ori_shape'].to(self._device) for item in items]
-            proposals, proposal_losses = self.proposal_head(
-                image_sizes, features, gt_bboxes
-            )
+            proposals, proposal_losses = self.proposal_head(image_sizes, features, gt_bboxes)
         else:
             assert 'proposals' in items[0]
             proposals = [item['proposals'].to(self._device) for item in items]
@@ -63,9 +58,9 @@ class FasterRCNN(nn.Module):
 
         image_ids = [item['id'] for item in items]
         gt_labels = [item['labels'].to(self._device) for item in items]
-        _, detector_losses = self.roi_head(
-            images, features, proposals, gt_bboxes, gt_labels
-        )
+        _, detector_losses = self.roi_head(images, features, proposals, gt_bboxes, gt_labels)
+        print(image_ids)
+        print(proposal_losses)
 
         return features
 

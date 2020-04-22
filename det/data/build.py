@@ -1,20 +1,15 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import logging
 import math
 
 import numpy as np
-from torch.utils.data import BatchSampler
-from torch.utils.data import DataLoader
+from torch.utils.data import BatchSampler, DataLoader
 
 from foundation.backends.torch import samplers
-from foundation.backends.torch.utils import comm
-from foundation.backends.torch.utils import env
+from foundation.backends.torch.utils import comm, env
 from foundation.utils import build
-from .registry import DatasetStash
-from .registry import TransformStash
+from .registry import DatasetStash, TransformStash
 
 logger = logging.getLogger(__name__)
 
@@ -100,4 +95,4 @@ def trivial_batch_collator(batch):
 
 
 def worker_init_reset_seed(worker_id):
-    env.set_random_seed(np.random.randint(2 ** 31) + worker_id)
+    env.set_random_seed(np.random.randint(2**31) + worker_id)

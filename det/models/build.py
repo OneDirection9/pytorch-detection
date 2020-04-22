@@ -1,9 +1,14 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-from foundation.utils import build
-from .registry import *
+from foundation.registry import build
+from .registry import (
+    AnchorGeneratorStash,
+    ArchStash,
+    BackboneStash,
+    NeckStash,
+    ProposalHeadStash,
+    ROIHeadStash,
+)
 
 __all__ = ['build_model']
 
@@ -18,6 +23,7 @@ name_to_registry = {
 
 
 def build_model(model_cfg):
+
     def update(cfg):
         """Builds sub-modules from configs."""
         if isinstance(cfg, dict):

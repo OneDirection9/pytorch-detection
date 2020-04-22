@@ -1,7 +1,7 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-from . import data
-from . import engine
-from . import models
+from . import data, engine, models
+
+# This line will be programatically read/write by setup.py.
+# Leave them at the bottom of this file and don't touch them
+__version__ = '0.0.1'

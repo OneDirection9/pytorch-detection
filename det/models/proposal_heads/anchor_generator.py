@@ -1,9 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
 #
 # Modified by: Zhipeng Han
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import copy
 import math
@@ -63,9 +61,29 @@ class StandardAnchorGenerator(nn.Module):
             is 0.5, although it is not expected to affect model accuracy. Default: 0.0
     """
 
-    def __init__(self, strides=(4, 8, 16, 32, 64,),
-                 sizes=((32,), (64,), (128,), (256,), (512,),),
-                 aspect_ratios=((0.5, 1.0, 2.0,),), offset=0.0):
+    def __init__(
+        self,
+        strides=(
+            4,
+            8,
+            16,
+            32,
+            64,
+        ),
+        sizes=(
+            (32,),
+            (64,),
+            (128,),
+            (256,),
+            (512,),
+        ),
+        aspect_ratios=((
+            0.5,
+            1.0,
+            2.0,
+        ),),
+        offset=0.0
+    ):
         super(StandardAnchorGenerator, self).__init__()
 
         assert 0. <= offset < 1, offset
@@ -86,9 +104,9 @@ class StandardAnchorGenerator(nn.Module):
 
         # Calculate base anchors for each level feature map
         # Convert to buffer so that anchors are copied to the same device as the model
-        self._base_anchors = BufferList([
-            self.generate_base_anchors(s, ar) for s, ar in zip(sizes, aspect_ratios)
-        ])
+        self._base_anchors = BufferList(
+            [self.generate_base_anchors(s, ar) for s, ar in zip(sizes, aspect_ratios)]
+        )
 
     @property
     def num_anchors(self):
@@ -123,7 +141,7 @@ class StandardAnchorGenerator(nn.Module):
         """
         anchors = []
         for size in sizes:
-            area = size ** 2.0
+            area = size**2.0
             for aspect_ratio in aspect_ratios:
                 # w / h = ar -> w = h * ar
                 # h * w = area
@@ -138,11 +156,13 @@ class StandardAnchorGenerator(nn.Module):
     def _meshgrid(self, grid_size, stride, device):
         grid_h, grid_w = grid_size
         shifts_x = torch.arange(
-            stride * self._offset, grid_w * stride, step=stride, dtype=torch.float32,
-            device=device
+            stride * self._offset, grid_w * stride, step=stride, dtype=torch.float32, device=device
         )
         shifts_y = torch.arange(
-            stride * self._offset, grid_h * stride, step=stride, dtype=torch.float32,
+            stride * self._offset,
+            grid_h * stride,
+            step=stride,
+            dtype=torch.float32,
             device=device,
         )
         shift_y, shift_x = torch.meshgrid(shifts_y, shifts_x)
@@ -169,9 +189,7 @@ class StandardAnchorGenerator(nn.Module):
             # Add A anchors (1, A, 4) to K shifts (K, 1, 4) to get shifted anchors
             # (K, A, 4), reshape to (K * A, 4). First A rows correspond to A anchors of
             # (0, 0) in feature map, then (0, 1), (0, 2), ...
-            anchors.append(
-                (shifts.view(-1, 1, 4) + base_anchors_i.view(1, -1, 4)).reshape(-1, 4)
-            )
+            anchors.append((shifts.view(-1, 1, 4) + base_anchors_i.view(1, -1, 4)).reshape(-1, 4))
 
         return anchors
 
@@ -188,6 +206,5 @@ class StandardAnchorGenerator(nn.Module):
         grid_sizes = [feature_map.shape[-2:] for feature_map in features]
         anchors_over_all_feature_map = self.grid_anchors(grid_sizes)
 
-        anchors = [copy.deepcopy(anchors_over_all_feature_map)
-                   for _ in range(num_images)]
+        anchors = [copy.deepcopy(anchors_over_all_feature_map) for _ in range(num_images)]
         return anchors

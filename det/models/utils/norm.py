@@ -1,9 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 #
 # Modified: Zhipeng Han
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import torch
 import torch.distributed as dist
@@ -82,9 +80,9 @@ def get_norm(norm, out_channels):
         if len(norm) == 0:
             return None
         norm = {
-            "BN": nn.BatchNorm2d,
-            "SyncBN": NaiveSyncBatchNorm2d,
-            "GN": lambda channels: nn.GroupNorm(32, channels),
-            "nnSyncBN": nn.SyncBatchNorm,  # keep for debugging
+            'BN': nn.BatchNorm2d,
+            'SyncBN': NaiveSyncBatchNorm2d,
+            'GN': lambda channels: nn.GroupNorm(32, channels),
+            'nnSyncBN': nn.SyncBatchNorm,  # keep for debugging
         }[norm]
     return norm(out_channels)

@@ -1,9 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
 #
 # Modified by: Zhipeng Han
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import math
 
@@ -42,8 +40,8 @@ def box_iou(boxes1, boxes2):
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
 
-    wh = torch.min(boxes1[:, None, 2:], boxes2[:, 2:]) - torch.max(
-        boxes1[:, None, :2], boxes2[:, :2])  # [N, M, 2]
+    wh = torch.min(boxes1[:, None, 2:],
+                   boxes2[:, 2:]) - torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N, M, 2]
     wh = wh.clamp_(min=0)  # [N, M, 2]
     inter = wh.prod(dim=2)  # [N, M]
     del wh
@@ -71,11 +69,11 @@ def box_idxs_inside_image(boxes, image_size, boundary_threshold=0):
     """
     h, w = image_size
     idxs_inside = (
-            (boxes[..., 0] >= - boundary_threshold)
-            & (boxes[..., 1] >= -boundary_threshold)
-            & (boxes[..., 2] < w + boundary_threshold)
-            & (boxes[..., 3] < h + boundary_threshold)
-    )
+        (boxes[..., 0] >= - boundary_threshold)
+        & (boxes[..., 1] >= -boundary_threshold)
+        & (boxes[..., 2] < w + boundary_threshold)
+        & (boxes[..., 3] < h + boundary_threshold)
+    )  # yapf: disable
     return idxs_inside
 
 
@@ -203,8 +201,10 @@ def add_ground_truth_to_proposals(gt_bboxes, proposals):
     if len(proposals) == 0:
         return proposals
 
-    return [add_ground_truth_to_proposals_single_image(gt_bboxes_i, proposals_i)
-            for gt_bboxes_i, proposals_i in zip(gt_bboxes, proposals)]
+    return [
+        add_ground_truth_to_proposals_single_image(gt_bboxes_i, proposals_i)
+        for gt_bboxes_i, proposals_i in zip(gt_bboxes, proposals)
+    ]
 
 
 def add_ground_truth_to_proposals_single_image(gt_bboxes, proposals):

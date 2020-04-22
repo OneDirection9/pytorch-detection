@@ -1,9 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
 #
 # Modified by: Zhipeng Han
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import itertools
 
@@ -17,7 +15,6 @@ from .. import utils as mo_utils
 from ..registry import ProposalHeadStash
 
 __all__ = ['RPN']
-
 """
 Shape shorthand in this module:
 
@@ -131,16 +128,27 @@ class RPN(nn.Module):
         loss_weight (float, optional): The weight of RPN losses. Default: 1.0
     """
 
-    def __init__(self, anchor_generator, in_channels=256,
-                 # Matcher
-                 low_threshold=0.3, high_threshold=0.7,
-                 boundary_threshold=-1, bbox_reg_weights=(1., 1., 1., 1.), min_size=0,
-                 # Sampler
-                 batch_size_per_image=256, positive_fraction=0.5,
-                 # NMS
-                 pre_nms_topk=None, post_nms_topk=None, nms_thresh=0.7,
-                 # Loss
-                 smooth_l1_beta=0.0, loss_weight=1.0):
+    def __init__(
+        self,
+        anchor_generator,
+        in_channels=256,
+        # Matcher
+        low_threshold=0.3,
+        high_threshold=0.7,
+        boundary_threshold=-1,
+        bbox_reg_weights=(1., 1., 1., 1.),
+        min_size=0,
+        # Sampler
+        batch_size_per_image=256,
+        positive_fraction=0.5,
+        # NMS
+        pre_nms_topk=None,
+        post_nms_topk=None,
+        nms_thresh=0.7,
+        # Loss
+        smooth_l1_beta=0.0,
+        loss_weight=1.0
+    ):
         super(RPN, self).__init__()
 
         assert isinstance(anchor_generator, nn.Module)
@@ -157,7 +165,8 @@ class RPN(nn.Module):
         self._min_size = min_size
         self._batch_size_per_image = batch_size_per_image
         self._balanced_sampler = mo_utils.BalancedPositiveNegativeSampler(
-            batch_size_per_image, positive_fraction,
+            batch_size_per_image,
+            positive_fraction,
         )
 
         # Default pre/post_nms_topk is for P2, P3, P4, P5, P6 per FPN level
@@ -233,7 +242,9 @@ class RPN(nn.Module):
             else:
                 matched_gt_bboxes = gt_bboxes_i[matched_idxs]
                 gt_anchor_deltas_i = mo_utils.box_deltas(
-                    anchors_i, matched_gt_bboxes, self._bbox_reg_weights,
+                    anchors_i,
+                    matched_gt_bboxes,
+                    self._bbox_reg_weights,
                 )
 
             gt_objectness_logits.append(gt_objectness_logits_i)
@@ -242,18 +253,17 @@ class RPN(nn.Module):
         # Stack to: (N, num_anchors_per_image)
         gt_objectness_logits = torch.stack(
             # Sampling a batch of anchors to compute losses
-            [resample(label) for label in gt_objectness_logits], dim=0
+            [resample(label) for label in gt_objectness_logits],
+            dim=0
         )
 
         # Log the number of positive/negative anchors per-image that's used in training
         # TODO: log information when training
-        num_pos_anchors = (gt_objectness_logits == mo_utils.POSITIVE).sum().item()
-        num_neg_anchors = (gt_objectness_logits == mo_utils.NEGATIVE).sum().item()
+        # num_pos_anchors = (gt_objectness_logits == mo_utils.POSITIVE).sum().item()
+        # num_neg_anchors = (gt_objectness_logits == mo_utils.NEGATIVE).sum().item()
 
         # Split to tuple of L tensors, each with shape (N, Hi*Wi*A)
-        gt_objectness_logits = torch.split(
-            gt_objectness_logits, num_anchors_per_map, dim=1
-        )
+        gt_objectness_logits = torch.split(gt_objectness_logits, num_anchors_per_map, dim=1)
 
         # Stack to: (N, num_anchors_per_image, B)
         gt_anchor_deltas = torch.stack(gt_anchor_deltas, dim=0)
@@ -262,8 +272,9 @@ class RPN(nn.Module):
 
         return gt_objectness_logits, gt_anchor_deltas
 
-    def compute_losses(self, pred_objectness_logits, pred_anchor_deltas,
-                       gt_objectness_logits, gt_anchor_deltas):
+    def compute_losses(
+        self, pred_objectness_logits, pred_anchor_deltas, gt_objectness_logits, gt_anchor_deltas
+    ):
         """Computes RPN losses including objectness and localization losses.
 
         Args:
@@ -331,8 +342,10 @@ class RPN(nn.Module):
         # Compute localization loss
         pos_masks = gt_objectness_logits == mo_utils.POSITIVE
         localization_loss = mo_utils.smooth_l1_loss(
-            pred_anchor_deltas[pos_masks], gt_anchor_deltas[pos_masks],
-            self._smooth_l1_beta, reduction='sum'
+            pred_anchor_deltas[pos_masks],
+            gt_anchor_deltas[pos_masks],
+            self._smooth_l1_beta,
+            reduction='sum'
         )
 
         normalizer = 1.0 / (self._batch_size_per_image * num_images)
@@ -433,9 +446,7 @@ class RPN(nn.Module):
             keep = box_ops.batched_nms(boxes, scores, lvl, self._nms_thresh)
             keep = keep[:self.post_nms_topk]
 
-            results.append(
-                torch.cat([boxes[keep], scores[keep].unsqueeze(1)], dim=1)  # (K, B+1)
-            )
+            results.append(torch.cat([boxes[keep], scores[keep].unsqueeze(1)], dim=1))  # (K, B+1)
 
         return results
 
@@ -457,26 +468,24 @@ class RPN(nn.Module):
         N, B = len(anchors), self._box_dim
         pred_objectness_logits = [
             # Reshape: (N, A, Hi, Wi) -> (N, Hi, Wi, A) -> (N, Hi*Wi*A)
-            x.permute(0, 2, 3, 1).reshape(N, -1)
-            for x in pred_objectness_logits
+            x.permute(0, 2, 3, 1).reshape(N, -1) for x in pred_objectness_logits
         ]
         pred_anchor_deltas = [
             # Reshape: (N, A*B, Hi, Wi) -> (N, A, B, Hi, Wi) -> (N, Hi, Wi, A, B) ->
             #           (N, Hi*Wi*A, B)
-            x.view(
-                x.shape[0], -1, B, x.shape[-2], x.shape[-1]
-            ).permute(0, 3, 4, 1, 2).reshape(N, -1, B)
-            for x in pred_anchor_deltas
+            x.view(x.shape[0], -1, B, x.shape[-2],
+                   x.shape[-1]).permute(0, 3, 4, 1, 2).reshape(N, -1, B) for x in pred_anchor_deltas
         ]
 
         if self.training:
             assert gt_bboxes is not None
             gt_objectness_logits, gt_anchor_deltas = self.get_ground_truth(
-                image_sizes, anchors, gt_bboxes,
+                image_sizes,
+                anchors,
+                gt_bboxes,
             )
             losses = self.compute_losses(
-                pred_objectness_logits, pred_anchor_deltas, gt_objectness_logits,
-                gt_anchor_deltas
+                pred_objectness_logits, pred_anchor_deltas, gt_objectness_logits, gt_anchor_deltas
             )
             losses = {k: v * self._loss_weight for k, v in losses.items()}
         else:
@@ -484,9 +493,7 @@ class RPN(nn.Module):
 
         with torch.no_grad():
             proposals = self.predict_proposals(anchors, pred_anchor_deltas)
-            proposals = self.find_top_proposals(
-                proposals, pred_objectness_logits, image_sizes
-            )
+            proposals = self.find_top_proposals(proposals, pred_objectness_logits, image_sizes)
             # For RPN-only models, the proposals are the final output and we return them
             # in high-to-low confidence order.
             # For end-to-end models, the RPN proposals are an intermediate state and this

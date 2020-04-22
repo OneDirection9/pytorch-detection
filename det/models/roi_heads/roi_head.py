@@ -1,9 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
 #
 # Modified by: Zhipeng Han
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import torch
 from torch import nn
@@ -22,8 +20,14 @@ class ROIHead(nn.Module):
     It can have many variants, implemented as subclasses of this class.
     """
 
-    def __init__(self, proposal_append_gt=True, iou_threshold=0.5,
-                 batch_size_per_image=512, positive_sample_fraction=0.25, num_classes=80):
+    def __init__(
+        self,
+        proposal_append_gt=True,
+        iou_threshold=0.5,
+        batch_size_per_image=512,
+        positive_sample_fraction=0.25,
+        num_classes=80
+    ):
         super(ROIHead, self).__init__()
 
         self._proposal_append_gt = proposal_append_gt
@@ -113,11 +117,13 @@ class ROIHead(nn.Module):
 
             num_bg_samples.append((proposal_labels_i == self._num_classes).sum().item())
             num_fg_samples.append(proposal_labels_i.numel() - num_bg_samples[-1])
-            proposals_with_gt.append({
-                'proposals': proposals_i,
-                'gt_labels': proposal_labels_i,
-                'gt_bboxes': proposal_targets,
-            })
+            proposals_with_gt.append(
+                {
+                    'proposals': proposals_i,
+                    'gt_labels': proposal_labels_i,
+                    'gt_bboxes': proposal_targets,
+                }
+            )
 
         # TODO: log the information
         # Log the number of fg/bg samples that are selected for training ROI heads

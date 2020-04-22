@@ -1,10 +1,8 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import torch
 
-from .constant import *
+from .constant import IGNORED, NEGATIVE, POSITIVE
 
 __all__ = ['Matcher']
 
@@ -63,10 +61,14 @@ class Matcher(object):
             # When no ground-truth boxes, we define IoU = 0 and therefore set labels to
             # NEGATIVE
             default_matches = match_quality_matrix.new_full(
-                (match_quality_matrix.size(1),), 0, dtype=torch.int64,
+                (match_quality_matrix.size(1),),
+                0,
+                dtype=torch.int64,
             )
             default_match_labels = match_quality_matrix.new_full(
-                (match_quality_matrix.size(1),), NEGATIVE, dtype=torch.int8,
+                (match_quality_matrix.size(1),),
+                NEGATIVE,
+                dtype=torch.int8,
             )
             return default_matches, default_match_labels
 
@@ -81,7 +83,7 @@ class Matcher(object):
         # Assign candidate matches with low quality to negative (unassigned) values
         below_low_threshold = matched_vals < self._low_threshold
         between_thresholds = (matched_vals >= self._low_threshold) & (
-                matched_vals < self._high_threshold
+            matched_vals < self._high_threshold
         )
 
         match_labels[below_low_threshold] = NEGATIVE

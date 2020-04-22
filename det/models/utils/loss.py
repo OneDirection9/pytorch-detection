@@ -1,16 +1,14 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
 #
 # Modified by: Zhipeng Han
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import torch
 
 __all__ = ['smooth_l1_loss']
 
 
-def smooth_l1_loss(input, target, beta: float, reduction: str = "none"):
+def smooth_l1_loss(input, target, beta: float, reduction: str = 'none'):
     """
     Smooth L1 loss defined in the Fast R-CNN paper as:
                   | 0.5 * x ** 2 / beta   if abs(x) < beta
@@ -59,10 +57,10 @@ def smooth_l1_loss(input, target, beta: float, reduction: str = "none"):
     else:
         n = torch.abs(input - target)
         cond = n < beta
-        loss = torch.where(cond, 0.5 * n ** 2 / beta, n - 0.5 * beta)
+        loss = torch.where(cond, 0.5 * n**2 / beta, n - 0.5 * beta)
 
-    if reduction == "mean":
+    if reduction == 'mean':
         loss = loss.mean()
-    elif reduction == "sum":
+    elif reduction == 'sum':
         loss = loss.sum()
     return loss
