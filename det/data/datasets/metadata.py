@@ -3,6 +3,8 @@
 # Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
+from typing import List, NoReturn, Tuple
+
 from ..build import MetadataStash
 
 __all__ = [
@@ -14,8 +16,6 @@ __all__ = [
 ]
 
 # yapf: disable
-
-
 # All coco categories, together with their nice-looking visualization colors
 # It's from https://github.com/cocodataset/panopticapi/blob/master/panoptic_coco_categories.json
 COCO_CATEGORIES = [
@@ -154,7 +154,7 @@ COCO_CATEGORIES = [
     {'color': [250, 141, 255], 'isthing': 0, 'id': 200, 'name': 'rug-merged'},
 ]
 
-COCO_PERSON_KEYPOINT_NAMES = (
+COCO_PERSON_KEYPOINT_NAMES = [
     'nose',
     'left_eye', 'right_eye',
     'left_ear', 'right_ear',
@@ -164,10 +164,10 @@ COCO_PERSON_KEYPOINT_NAMES = (
     'left_hip', 'right_hip',
     'left_knee', 'right_knee',
     'left_ankle', 'right_ankle',
-)
+]
 
 # Pairs of keypoints that should be exchanged under horizontal flipping
-COCO_PERSON_KEYPOINT_FLIP_MAP = (
+COCO_PERSON_KEYPOINT_FLIP_MAP = [
     ('left_eye', 'right_eye'),
     ('left_ear', 'right_ear'),
     ('left_shoulder', 'right_shoulder'),
@@ -176,7 +176,7 @@ COCO_PERSON_KEYPOINT_FLIP_MAP = (
     ('left_hip', 'right_hip'),
     ('left_knee', 'right_knee'),
     ('left_ankle', 'right_ankle'),
-)
+]
 
 # Rules for pairs of keypoints to draw a line between, and the line color to use.
 COCO_PERSON_KEYPOINT_CONNECTION_RULES = [
@@ -206,42 +206,40 @@ COCO_PERSON_KEYPOINT_CONNECTION_RULES = [
 class Metadata(object):
     """Metadata of dataset which is useful in evaluation, visualization or logging."""
 
-    def __init__(self):
-        self._thing_classes = None
-        self._thing_colors = None
-        self._stuff_classes = None
-        self._stuff_colors = None
-        self._keypoint_names = None
-        self._keypoint_flip_map = None
-        self._keypoint_connection_rules = None
+    @property
+    def thing_classes(self) -> NoReturn:
+        """Thing class names."""
+        raise NotImplementedError
 
     @property
-    def thing_classes(self):
-        return self._thing_classes
+    def thing_colors(self) -> NoReturn:
+        """Visualization colors of each thing classes."""
+        raise NotImplementedError
 
     @property
-    def thing_colors(self):
-        return self._thing_colors
+    def stuff_classes(self) -> NoReturn:
+        """Stuff class names."""
+        raise NotImplementedError
 
     @property
-    def stuff_classes(self):
-        return self._stuff_classes
+    def stuff_colors(self) -> NoReturn:
+        """Visualization colors of each stuff classes."""
+        raise NotImplementedError
 
     @property
-    def stuff_colors(self):
-        return self._stuff_colors
+    def keypoint_names(self) -> NoReturn:
+        """Keypoint names."""
+        raise NotImplementedError
 
     @property
-    def keypoint_names(self):
-        return self._keypoint_names
+    def keypoint_flip_map(self) -> NoReturn:
+        """Pairs of keypoints that should be exchanged under horizontal flipping."""
+        raise NotImplementedError
 
     @property
-    def keypoint_flip_map(self):
-        return self._keypoint_flip_map
-
-    @property
-    def keypoint_connection_rules(self):
-        return self._keypoint_connection_rules
+    def keypoint_connection_rules(self) -> NoReturn:
+        """Rules for pairs of keypoints to draw a line between, and the line color to use."""
+        raise NotImplementedError
 
 
 @MetadataStash.register('COCOInstanceMetadata')
@@ -249,11 +247,17 @@ class COCOInstanceMetadata(Metadata):
     """COCO instance metadata including thing_classes and thing_colors."""
 
     def __init__(self):
-        super(COCOInstanceMetadata, self).__init__()
-
         self._thing_classes = [k['name'] for k in COCO_CATEGORIES if k['isthing'] == 1]
         self._thing_colors = [k['color'] for k in COCO_CATEGORIES if k['isthing'] == 1]
         assert self._thing_classes == 80, len(self._thing_classes)
+
+    @property
+    def thing_classes(self) -> List[str]:
+        return self._thing_classes
+
+    @property
+    def thing_colors(self) -> List[List[int]]:
+        return self._thing_colors
 
 
 @MetadataStash.register('COCOPersonMetadata')
@@ -263,13 +267,21 @@ class COCOPersonMetadata(Metadata):
     keypoint_connection_rules.
     """
 
-    def __init__(self):
-        super(COCOPersonMetadata, self).__init__()
+    @property
+    def thing_classes(self) -> List[str]:
+        return ['person']
 
-        self._thing_classes = ['person']
-        self._keypoint_names = COCO_PERSON_KEYPOINT_NAMES
-        self._keypoint_flip_map = COCO_PERSON_KEYPOINT_FLIP_MAP
-        self._keypoint_connection_rules = COCO_PERSON_KEYPOINT_CONNECTION_RULES
+    @property
+    def keypoint_names(self) -> List[str]:
+        return COCO_PERSON_KEYPOINT_NAMES
+
+    @property
+    def keypoint_flip_map(self) -> List[Tuple[str, str]]:
+        return COCO_PERSON_KEYPOINT_FLIP_MAP
+
+    @property
+    def keypoint_connection_rules(self) -> List[Tuple[str, str, List[int]]]:
+        return COCO_PERSON_KEYPOINT_CONNECTION_RULES
 
 
 @MetadataStash.register('COCOPanopticMetadata')
@@ -279,8 +291,6 @@ class COCOPanopticMetadata(Metadata):
     """
 
     def __init__(self):
-        super(COCOPanopticMetadata, self).__init__()
-
         self._thing_classes = [k['name'] for k in COCO_CATEGORIES if k['isthing'] == 1]
         self._thing_colors = [k['color'] for k in COCO_CATEGORIES if k['isthing'] == 1]
         assert self._thing_classes == 80, len(self._thing_classes)
@@ -297,19 +307,36 @@ class COCOPanopticMetadata(Metadata):
             k['color'] for k in COCO_CATEGORIES if k['isthing'] == 0
         ]  # yapf: disable
 
+    @property
+    def thing_classes(self) -> List[str]:
+        return self._thing_classes
+
+    @property
+    def thing_colors(self) -> List[List[int]]:
+        return self._thing_colors
+
+    @property
+    def stuff_classes(self) -> List[str]:
+        return self._stuff_classes
+
+    @property
+    def stuff_colors(self) -> List[List[int]]:
+        return self._stuff_colors
+
 
 @MetadataStash.register('Cityscapes')
 class Cityscapes(Metadata):
     """Cityscapes metadata including thing_classes and stuff_classes."""
 
-    def __init__(self):
-        super(Cityscapes, self).__init__()
-
-        self._thing_classes = [
-            'person', 'rider', 'car', 'truck',
-            'bus', 'train', 'motorcycle', 'bicycle',
+    @property
+    def thing_classes(self) -> List[str]:
+        return [
+            'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle',
         ]  # yapf: disable
-        self._stuff_classes = [
+
+    @property
+    def stuff_classes(self) -> List[str]:
+        return [
             'road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light',
             'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car',
             'truck', 'bus', 'train', 'motorcycle', 'bicycle', 'license plate',
