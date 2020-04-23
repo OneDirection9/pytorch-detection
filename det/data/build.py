@@ -4,16 +4,27 @@ import logging
 import math
 
 import numpy as np
-from torch.utils.data import BatchSampler, DataLoader
-
 from foundation.backends.torch import samplers
 from foundation.backends.torch.utils import comm, env
-from foundation.utils import build
-from .registry import DatasetStash, TransformStash
+from foundation.registry import Registry, build
+from torch.utils.data import BatchSampler, DataLoader
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['build_train_loader', 'build_test_loader']
+
+class MetadataStash(Registry):
+    """Registry for metadata."""
+    pass
+
+
+class DatasetStash(Registry):
+    """Registry for datasets."""
+    pass
+
+
+class TransformStash(Registry):
+    """Registry for transforms."""
+    pass
 
 
 def build_train_loader(dataset_cfg, dataloader_cfg):
