@@ -3,10 +3,10 @@
 # Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
+from foundation.backends.torch.utils import weight_init
 from torch import nn
 from torch.nn.modules.batchnorm import _BatchNorm
 
-from foundation.backends.torch.utils import weight_init
 from ..registry import BackboneStash
 from ..utils import get_norm
 

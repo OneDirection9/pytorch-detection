@@ -25,6 +25,7 @@ install_requires = [
     'opencv-python==4.1.0.25',
     'torch>=1.4.0',
     'torchvision>=0.5.0',
+    'pycocotools',
 ]
 
 extras_require = {}

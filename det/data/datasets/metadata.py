@@ -3,16 +3,17 @@
 # Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
-from typing import List, NoReturn, Tuple
+from typing import List, Tuple
 
-from ..build import MetadataStash
+from foundation.registry import Registry
 
 __all__ = [
+    'MetadataStash',
     'Metadata',
     'COCOInstanceMetadata',
     'COCOPersonMetadata',
     'COCOPanopticMetadata',
-    'Cityscapes',
+    'CityscapesMetadata',
 ]
 
 # yapf: disable
@@ -203,43 +204,53 @@ COCO_PERSON_KEYPOINT_CONNECTION_RULES = [
 # yapf: enable
 
 
+class MetadataStash(Registry):
+    """Registry for metadata."""
+    pass
+
+
 class Metadata(object):
     """Metadata of dataset which is useful in evaluation, visualization or logging."""
 
     @property
-    def thing_classes(self) -> NoReturn:
+    def thing_classes(self) -> List[str]:
         """Thing class names."""
         raise NotImplementedError
 
     @property
-    def thing_colors(self) -> NoReturn:
+    def thing_colors(self) -> List[List[int]]:
         """Visualization colors of each thing classes."""
         raise NotImplementedError
 
     @property
-    def stuff_classes(self) -> NoReturn:
+    def stuff_classes(self) -> List[str]:
         """Stuff class names."""
         raise NotImplementedError
 
     @property
-    def stuff_colors(self) -> NoReturn:
+    def stuff_colors(self) -> List[List[int]]:
         """Visualization colors of each stuff classes."""
         raise NotImplementedError
 
     @property
-    def keypoint_names(self) -> NoReturn:
+    def keypoint_names(self) -> List[str]:
         """Keypoint names."""
         raise NotImplementedError
 
     @property
-    def keypoint_flip_map(self) -> NoReturn:
+    def keypoint_flip_map(self) -> List[Tuple[str, str]]:
         """Pairs of keypoints that should be exchanged under horizontal flipping."""
         raise NotImplementedError
 
     @property
-    def keypoint_connection_rules(self) -> NoReturn:
+    def keypoint_connection_rules(self) -> List[Tuple[str, str, List[int]]]:
         """Rules for pairs of keypoints to draw a line between, and the line color to use."""
         raise NotImplementedError
+
+
+"""
+Builtin metadata
+"""
 
 
 @MetadataStash.register('COCOInstanceMetadata')
@@ -324,8 +335,8 @@ class COCOPanopticMetadata(Metadata):
         return self._stuff_colors
 
 
-@MetadataStash.register('Cityscapes')
-class Cityscapes(Metadata):
+@MetadataStash.register('CityscapesMetadata')
+class CityscapesMetadata(Metadata):
     """Cityscapes metadata including thing_classes and stuff_classes."""
 
     @property

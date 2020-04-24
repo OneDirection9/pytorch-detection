@@ -5,10 +5,9 @@ from __future__ import absolute_import, division, print_function
 
 import torch
 import torch.distributed as dist
+from foundation.backends.torch.utils import comm
 from torch import nn
 from torch.autograd.function import Function
-
-from foundation.backends.torch.utils import comm
 
 __all__ = ['NaiveSyncBatchNorm2d', 'get_norm']
 

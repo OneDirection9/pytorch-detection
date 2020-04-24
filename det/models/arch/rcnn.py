@@ -4,9 +4,9 @@
 from __future__ import absolute_import, division, print_function
 
 import torch
+from foundation.backends.torch.utils import batch_tensors
 from torch import nn
 
-from foundation.backends.torch.utils import batch_tensors
 from ..registry import ArchStash
 
 __all__ = ['FasterRCNN']

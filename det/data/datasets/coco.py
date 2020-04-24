@@ -1,22 +1,78 @@
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+#
+# Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
+import contextlib
 import copy
+import io
 import logging
 import os.path as osp
+from typing import Callable, Optional, Type
 
 import foundation as fdn
 import numpy as np
+from foundation.utils import Timer
 
-from ..build import DatasetStash
-from . import base
+from .base import VisionDataset, VisionDatasetStash
+from .metadata import Metadata
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['CocoDetection']
+__all__ = ['COCOInstance']
 
 
-@DatasetStash.register('CocoDetection')
-class CocoDetection(base.VisionDataset):
+@VisionDatasetStash.register('COCOInstance')
+class COCOInstance(VisionDataset):
+    """COCO instance dataset for object detection task and keypoint detection task."""
+
+    def __init__(
+        self,
+        json_file: str,
+        image_root: str,
+        metadata: Type[Metadata],
+        filter_fn: Optional[Callable] = None,
+    ) -> None:
+        """
+        Args:
+            json_file: Path to the json file in COCO instances annotation format. Refer
+                http://cocodataset.org/#format-data for more details.
+            image_root: The directory where
+            metadata:
+            filter_fn:
+        """
+        self._image_root = image_root
+        self._json_file = json_file
+        self._metadata = metadata
+        self._filter_fn = filter_fn
+
+    @property
+    def metadata(self) -> Type[Metadata]:
+        return self._metadata
+
+    def get_items(self):
+        from pycocotools.coco import COCO
+
+        timer = Timer()
+        with contextlib.redirect_stdout(io.StringIO()):
+            coco_api = COCO(self._json_file)
+        if timer.seconds() > 1:
+            logger.info('Loading {} takes {:.2f} seconds'.format(self._json_file, timer.seconds()))
+
+        cat_ids = coco_api.getCatIds()
+        cats = coco_api.loadCats(cat_ids)
+        print(cats)
+
+    def check_metadata_consistency(self, cats):
+        """Checks that the json_file has consistent categories with self._metadata."""
+        pass
+
+    def __repr__(self):
+        return 'test'
+
+
+@VisionDatasetStash.register('CocoDetection')
+class CocoDetection(VisionDataset):
     """MSCOCO detection dataset.
 
     Args:

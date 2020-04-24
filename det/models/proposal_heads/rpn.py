@@ -6,11 +6,11 @@ from __future__ import absolute_import, division, print_function
 import itertools
 
 import torch
+from foundation.backends.torch.utils import weight_init
 from torch import nn
 from torch.nn import functional as F
 from torchvision.ops import boxes as box_ops
 
-from foundation.backends.torch.utils import weight_init
 from .. import utils as mo_utils
 from ..registry import ProposalHeadStash
 
