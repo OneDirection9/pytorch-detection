@@ -3,17 +3,13 @@
 # Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
-from typing import List, Tuple
-
-from foundation.registry import Registry
+from .base import Metadata, MetadataStash
 
 __all__ = [
-    'MetadataStash',
-    'Metadata',
-    'COCOInstanceMetadata',
-    'COCOPersonMetadata',
-    'COCOPanopticMetadata',
-    'CityscapesMetadata',
+    'get_coco_instance_metadata',
+    'get_coco_panoptic_metadata',
+    'get_coco_person',
+    'get_cityscapes',
 ]
 
 # yapf: disable
@@ -155,7 +151,7 @@ COCO_CATEGORIES = [
     {'color': [250, 141, 255], 'isthing': 0, 'id': 200, 'name': 'rug-merged'},
 ]
 
-COCO_PERSON_KEYPOINT_NAMES = [
+COCO_PERSON_KEYPOINT_NAMES = (
     'nose',
     'left_eye', 'right_eye',
     'left_ear', 'right_ear',
@@ -165,10 +161,10 @@ COCO_PERSON_KEYPOINT_NAMES = [
     'left_hip', 'right_hip',
     'left_knee', 'right_knee',
     'left_ankle', 'right_ankle',
-]
+)
 
 # Pairs of keypoints that should be exchanged under horizontal flipping
-COCO_PERSON_KEYPOINT_FLIP_MAP = [
+COCO_PERSON_KEYPOINT_FLIP_MAP = (
     ('left_eye', 'right_eye'),
     ('left_ear', 'right_ear'),
     ('left_shoulder', 'right_shoulder'),
@@ -177,7 +173,7 @@ COCO_PERSON_KEYPOINT_FLIP_MAP = [
     ('left_hip', 'right_hip'),
     ('left_knee', 'right_knee'),
     ('left_ankle', 'right_ankle'),
-]
+)
 
 # Rules for pairs of keypoints to draw a line between, and the line color to use.
 COCO_PERSON_KEYPOINT_CONNECTION_RULES = [
@@ -200,155 +196,101 @@ COCO_PERSON_KEYPOINT_CONNECTION_RULES = [
     ('right_knee', 'right_ankle', (255, 195, 77)),
 ]
 
+CITYSCAPES_THING_CLASSES = [
+    'person', 'rider', 'car', 'truck',
+    'bus', 'train', 'motorcycle', 'bicycle',
+]
+
+CITYSCAPES_STUFF_CLASSES = [
+    'road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light',
+    'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car',
+    'truck', 'bus', 'train', 'motorcycle', 'bicycle', 'license plate',
+]
+
 
 # yapf: enable
 
 
-class MetadataStash(Registry):
-    """Registry for metadata."""
-    pass
-
-
-class Metadata(object):
-    """Metadata of dataset which is useful in evaluation, visualization or logging."""
-
-    @property
-    def thing_classes(self) -> List[str]:
-        """Thing class names."""
-        raise NotImplementedError
-
-    @property
-    def thing_colors(self) -> List[List[int]]:
-        """Visualization colors of each thing classes."""
-        raise NotImplementedError
-
-    @property
-    def stuff_classes(self) -> List[str]:
-        """Stuff class names."""
-        raise NotImplementedError
-
-    @property
-    def stuff_colors(self) -> List[List[int]]:
-        """Visualization colors of each stuff classes."""
-        raise NotImplementedError
-
-    @property
-    def keypoint_names(self) -> List[str]:
-        """Keypoint names."""
-        raise NotImplementedError
-
-    @property
-    def keypoint_flip_map(self) -> List[Tuple[str, str]]:
-        """Pairs of keypoints that should be exchanged under horizontal flipping."""
-        raise NotImplementedError
-
-    @property
-    def keypoint_connection_rules(self) -> List[Tuple[str, str, List[int]]]:
-        """Rules for pairs of keypoints to draw a line between, and the line color to use."""
-        raise NotImplementedError
-
-
-"""
-Builtin metadata
-"""
-
-
 @MetadataStash.register('COCOInstanceMetadata')
-class COCOInstanceMetadata(Metadata):
-    """COCO instance metadata including thing_classes and thing_colors."""
-
-    def __init__(self):
-        self._thing_classes = [k['name'] for k in COCO_CATEGORIES if k['isthing'] == 1]
-        self._thing_colors = [k['color'] for k in COCO_CATEGORIES if k['isthing'] == 1]
-        assert self._thing_classes == 80, len(self._thing_classes)
-
-    @property
-    def thing_classes(self) -> List[str]:
-        return self._thing_classes
-
-    @property
-    def thing_colors(self) -> List[List[int]]:
-        return self._thing_colors
-
-
-@MetadataStash.register('COCOPersonMetadata')
-class COCOPersonMetadata(Metadata):
+def get_coco_instance_metadata() -> Metadata:
     """
-    COCO person metadata including thing_classes, keypoint_names, keypoint_flip_map and
-    keypoint_connection_rules.
+    Returns metadata of the instance dataset.
     """
+    thing_ids = [k['id'] for k in COCO_CATEGORIES if k['isthing'] == 1]
+    thing_colors = [k['color'] for k in COCO_CATEGORIES if k['isthing'] == 1]
+    assert len(thing_ids) == 80, len(thing_ids)
+    # Mapping from the incontiguous COCO category id to an id in [0, 79]
+    thing_dataset_id_to_contiguous_id = {k: i for i, k in enumerate(thing_ids)}
+    thing_classes = [k['name'] for k in COCO_CATEGORIES if k['isthing'] == 1]
 
-    @property
-    def thing_classes(self) -> List[str]:
-        return ['person']
+    m = Metadata()
+    m.set(**dict(
+        thing_dataset_id_to_contiguous_id=thing_dataset_id_to_contiguous_id,
+        thing_classes=thing_classes,
+        thing_colors=thing_colors,
+    ))  # yapf: disable
 
-    @property
-    def keypoint_names(self) -> List[str]:
-        return COCO_PERSON_KEYPOINT_NAMES
-
-    @property
-    def keypoint_flip_map(self) -> List[Tuple[str, str]]:
-        return COCO_PERSON_KEYPOINT_FLIP_MAP
-
-    @property
-    def keypoint_connection_rules(self) -> List[Tuple[str, str, List[int]]]:
-        return COCO_PERSON_KEYPOINT_CONNECTION_RULES
+    return m
 
 
 @MetadataStash.register('COCOPanopticMetadata')
-class COCOPanopticMetadata(Metadata):
+def get_coco_panoptic_metadata() -> Metadata:
     """
-    COCO panoptic metadata including thing_classes, thing_colors, stuff_classes and stuff_colors.
+    Returns metadata for "separated" version of the panoptic segmentation dataset.
     """
+    stuff_ids = [k['id'] for k in COCO_CATEGORIES if k['isthing'] == 0]
+    assert len(stuff_ids) == 53, len(stuff_ids)
 
-    def __init__(self):
-        self._thing_classes = [k['name'] for k in COCO_CATEGORIES if k['isthing'] == 1]
-        self._thing_colors = [k['color'] for k in COCO_CATEGORIES if k['isthing'] == 1]
-        assert self._thing_classes == 80, len(self._thing_classes)
+    # For semantic segmentation, this mapping maps from contiguous stuff id
+    # (in [0, 53], used in models) to ids in the dataset (used for processing results)
+    # The id 0 is mapped to an extra category "thing".
+    stuff_dataset_id_to_contiguous_id = {k: i + 1 for i, k in enumerate(stuff_ids)}
+    # When converting COCO panoptic annotations to semantic annotations
+    # We label the "thing" category to 0
+    stuff_dataset_id_to_contiguous_id[0] = 0
 
-        # 54 names for COCO stuff categories (including 'things')
-        self._stuff_classes = ['things'] + [
-            k['name'].replace('-other', '').replace('-merged', '')
-            for k in COCO_CATEGORIES if k['isthing'] == 0
-        ]
-        assert len(self._stuff_classes) == 54, len(self._stuff_classes)
+    # 54 names for COCO stuff categories (including "things")
+    stuff_classes = ['things'] + [
+        k['name'].replace('-other', '').replace('-merged', '')
+        for k in COCO_CATEGORIES if k['isthing'] == 0
+    ]
 
-        # NOTE: the color for things is randomly picked
-        self._stuff_colors = [[82, 18, 128]] + [
-            k['color'] for k in COCO_CATEGORIES if k['isthing'] == 0
-        ]  # yapf: disable
+    # NOTE: I randomly picked a color for things
+    stuff_colors = [[82, 18, 128]] + [k['color'] for k in COCO_CATEGORIES if k['isthing'] == 0]
 
-    @property
-    def thing_classes(self) -> List[str]:
-        return self._thing_classes
+    m = Metadata()
+    m.set(**dict(
+        stuff_dataset_id_to_contiguous_id=stuff_dataset_id_to_contiguous_id,
+        stuff_classes=stuff_classes,
+        stuff_colors=stuff_colors,
+    ))  # yapf: disable
+    m.set(**get_coco_instance_metadata().as_dict())
 
-    @property
-    def thing_colors(self) -> List[List[int]]:
-        return self._thing_colors
-
-    @property
-    def stuff_classes(self) -> List[str]:
-        return self._stuff_classes
-
-    @property
-    def stuff_colors(self) -> List[List[int]]:
-        return self._stuff_colors
+    return m
 
 
-@MetadataStash.register('CityscapesMetadata')
-class CityscapesMetadata(Metadata):
-    """Cityscapes metadata including thing_classes and stuff_classes."""
+@MetadataStash.register('COCOPersonMetadata')
+def get_coco_person() -> Metadata:
+    """
+    Returns metadata of the keypoint dataset.
+    """
+    m = Metadata()
+    m.set(**dict(
+        thing_classes=['person'],
+        keypoint_names=COCO_PERSON_KEYPOINT_NAMES,
+        keypoint_flip_map=COCO_PERSON_KEYPOINT_FLIP_MAP,
+        keypoint_connection_rules=COCO_PERSON_KEYPOINT_CONNECTION_RULES,
+    ))  # yapf: disable
 
-    @property
-    def thing_classes(self) -> List[str]:
-        return [
-            'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle',
-        ]  # yapf: disable
+    return m
 
-    @property
-    def stuff_classes(self) -> List[str]:
-        return [
-            'road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light',
-            'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car',
-            'truck', 'bus', 'train', 'motorcycle', 'bicycle', 'license plate',
-        ]  # yapf: disable
+
+@MetadataStash.register('Cityscapes')
+def get_cityscapes() -> Metadata:
+    m = Metadata()
+    m.set(**dict(
+        thing_classes=CITYSCAPES_THING_CLASSES,
+        stuff_classes=CITYSCAPES_STUFF_CLASSES,
+    ))
+
+    return m

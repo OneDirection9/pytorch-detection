@@ -14,8 +14,7 @@ import foundation as fdn
 import numpy as np
 from foundation.utils import Timer
 
-from .base import VisionDataset, VisionDatasetStash
-from .metadata import Metadata
+from .base import Metadata, VisionDataset, VisionDatasetStash
 
 logger = logging.getLogger(__name__)
 
