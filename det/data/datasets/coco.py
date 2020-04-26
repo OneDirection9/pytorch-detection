@@ -23,10 +23,10 @@ __all__ = ['COCOInstance']
 
 @VisionDatasetStash.register('COCOInstance')
 class COCOInstance(VisionDataset):
-    """COCO instance dataset supports object detection task and keypoint detection task.
+    """COCO instance dataset supporting object detection task and keypoint detection task.
 
-    This class loads a json file with COCO's instances annotation format. Currently supports
-    instance detection, instance segmentation, and person keypoints annotations. Refer
+    Loads a json file with COCO's instances annotation format. Currently supports instance
+    detection, instance segmentation, and person keypoints annotations. Refer
     http://cocodataset.org/#format-data for more details.
     """
 

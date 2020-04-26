@@ -79,8 +79,7 @@ class Metadata(types.SimpleNamespace):
         return self
 
     def get(self, key: str, default=None) -> Any:
-        """Accesses an attribute and return its value if exists. Otherwise return default.
-        """
+        """Accesses an attribute and return its value if exists. Otherwise return default."""
         try:
             return getattr(self, key)
         except AttributeError:
