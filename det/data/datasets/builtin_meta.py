@@ -213,9 +213,7 @@ CITYSCAPES_STUFF_CLASSES = [
 
 @MetadataStash.register('COCOInstanceMetadata')
 def get_coco_instance_metadata() -> Metadata:
-    """
-    Returns metadata of the instance dataset.
-    """
+    """Returns metadata of the instance dataset."""
     thing_ids = [k['id'] for k in COCO_CATEGORIES if k['isthing'] == 1]
     thing_colors = [k['color'] for k in COCO_CATEGORIES if k['isthing'] == 1]
     assert len(thing_ids) == 80, len(thing_ids)
@@ -224,20 +222,20 @@ def get_coco_instance_metadata() -> Metadata:
     thing_classes = [k['name'] for k in COCO_CATEGORIES if k['isthing'] == 1]
 
     m = Metadata()
-    m.set(**dict(
-        thing_dataset_id_to_contiguous_id=thing_dataset_id_to_contiguous_id,
-        thing_classes=thing_classes,
-        thing_colors=thing_colors,
-    ))  # yapf: disable
+    m.set(
+        **dict(
+            thing_dataset_id_to_contiguous_id=thing_dataset_id_to_contiguous_id,
+            thing_classes=thing_classes,
+            thing_colors=thing_colors,
+        )
+    )
 
     return m
 
 
 @MetadataStash.register('COCOPanopticMetadata')
 def get_coco_panoptic_metadata() -> Metadata:
-    """
-    Returns metadata for "separated" version of the panoptic segmentation dataset.
-    """
+    """Returns metadata for "separated" version of the panoptic segmentation dataset."""
     stuff_ids = [k['id'] for k in COCO_CATEGORIES if k['isthing'] == 0]
     assert len(stuff_ids) == 53, len(stuff_ids)
 
@@ -259,11 +257,13 @@ def get_coco_panoptic_metadata() -> Metadata:
     stuff_colors = [[82, 18, 128]] + [k['color'] for k in COCO_CATEGORIES if k['isthing'] == 0]
 
     m = Metadata()
-    m.set(**dict(
-        stuff_dataset_id_to_contiguous_id=stuff_dataset_id_to_contiguous_id,
-        stuff_classes=stuff_classes,
-        stuff_colors=stuff_colors,
-    ))  # yapf: disable
+    m.set(
+        **dict(
+            stuff_dataset_id_to_contiguous_id=stuff_dataset_id_to_contiguous_id,
+            stuff_classes=stuff_classes,
+            stuff_colors=stuff_colors,
+        )
+    )
     m.set(**get_coco_instance_metadata().as_dict())
 
     return m
@@ -271,16 +271,16 @@ def get_coco_panoptic_metadata() -> Metadata:
 
 @MetadataStash.register('COCOPersonMetadata')
 def get_coco_person() -> Metadata:
-    """
-    Returns metadata of the keypoint dataset.
-    """
+    """Returns metadata of the keypoint dataset."""
     m = Metadata()
-    m.set(**dict(
-        thing_classes=['person'],
-        keypoint_names=COCO_PERSON_KEYPOINT_NAMES,
-        keypoint_flip_map=COCO_PERSON_KEYPOINT_FLIP_MAP,
-        keypoint_connection_rules=COCO_PERSON_KEYPOINT_CONNECTION_RULES,
-    ))  # yapf: disable
+    m.set(
+        **dict(
+            thing_classes=['person'],
+            keypoint_names=COCO_PERSON_KEYPOINT_NAMES,
+            keypoint_flip_map=COCO_PERSON_KEYPOINT_FLIP_MAP,
+            keypoint_connection_rules=COCO_PERSON_KEYPOINT_CONNECTION_RULES,
+        )
+    )
 
     return m
 

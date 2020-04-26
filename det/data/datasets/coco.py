@@ -8,7 +8,7 @@ import copy
 import io
 import logging
 import os.path as osp
-from typing import Callable, Optional, Type
+from typing import Dict, List, Optional
 
 import foundation as fdn
 import numpy as np
@@ -23,33 +23,45 @@ __all__ = ['COCOInstance']
 
 @VisionDatasetStash.register('COCOInstance')
 class COCOInstance(VisionDataset):
-    """COCO instance dataset for object detection task and keypoint detection task."""
+    """COCO instance dataset supports object detection task and keypoint detection task.
+
+    This class loads a json file with COCO's instances annotation format. Currently supports
+    instance detection, instance segmentation, and person keypoints annotations. Refer
+    http://cocodataset.org/#format-data for more details.
+    """
 
     def __init__(
         self,
         json_file: str,
         image_root: str,
-        metadata: Type[Metadata],
-        filter_fn: Optional[Callable] = None,
+        extra_annotation_keys: Optional[List[str]] = None,
+        metadata: Optional[Metadata] = None,
     ) -> None:
         """
         Args:
-            json_file: Path to the json file in COCO instances annotation format. Refer
-                http://cocodataset.org/#format-data for more details.
-            image_root: The directory where
-            metadata:
-            filter_fn:
+            json_file: Path to the json file in COCO instances annotation format.
+            image_root: The directory where the image in this json file exists.
+            extra_annotation_keys: List of per-annotation keys that should also be loaded into the
+                dataset dict (besides "iscrowd", "bbox", "keypoints", "category_id",
+                "segmentation"). The values for these keys will be returned as-is. For example, the
+                densepose annotations are loaded in this way.
+            metadata: If provided, it should be consistent with the information in json file.
         """
         self._image_root = image_root
         self._json_file = json_file
-        self._metadata = metadata
-        self._filter_fn = filter_fn
+        self._extra_annotation_keys = extra_annotation_keys
+        self._metadata = metadata if metadata is not None else Metadata()
+
+        self._metadata.set(**dict(
+            image_root=image_root,
+            json_file=json_file,
+        ))
 
     @property
-    def metadata(self) -> Type[Metadata]:
+    def metadata(self) -> Metadata:
         return self._metadata
 
-    def get_items(self):
+    def get_examples(self) -> List[Dict]:
         from pycocotools.coco import COCO
 
         timer = Timer()
@@ -61,13 +73,6 @@ class COCOInstance(VisionDataset):
         cat_ids = coco_api.getCatIds()
         cats = coco_api.loadCats(cat_ids)
         print(cats)
-
-    def check_metadata_consistency(self, cats):
-        """Checks that the json_file has consistent categories with self._metadata."""
-        pass
-
-    def __repr__(self):
-        return 'test'
 
 
 @VisionDatasetStash.register('CocoDetection')

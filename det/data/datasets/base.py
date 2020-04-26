@@ -19,8 +19,8 @@ class MetadataStash(Registry):
 
 
 class Metadata(types.SimpleNamespace):
-    """
-    A class that supports simple attribute setter/getter.
+    """A class that supports simple attribute setter/getter.
+
     It is intended for storing metadata and as a attribute of a dataset.
 
     Examples:
@@ -66,24 +66,20 @@ class Metadata(types.SimpleNamespace):
             super().__setattr__(key, val)
 
     def as_dict(self) -> Dict[str, Any]:
-        """
-        Returns all the metadata as a dict.
+        """Returns all the metadata as a dict.
+
         Note that modifications to the returned dict will not reflect on the Metadata object.
         """
         return copy.copy(self.__dict__)
 
     def set(self, **kwargs: Any) -> 'Metadata':
-        """
-        Set multiple metadata with kwargs.
-        """
+        """Set multiple metadata with kwargs."""
         for k, v in kwargs.items():
             setattr(self, k, v)
         return self
 
     def get(self, key: str, default=None) -> Any:
-        """
-        Access an attribute and return its value if exists.
-        Otherwise return default.
+        """Accesses an attribute and return its value if exists. Otherwise return default.
         """
         try:
             return getattr(self, key)
@@ -92,21 +88,24 @@ class Metadata(types.SimpleNamespace):
 
 
 class VisionDatasetStash(Registry):
-    """Registry for vision datasets."""
+    """Registry of vision datasets."""
     pass
 
 
 class VisionDataset(object, metaclass=ABCMeta):
     """Base vision dataset.
 
-    This is not a typical PyTorch format dataset class. It is intended for storing metadata and can
-    return a list of examples for future usage, e.g. filter.
+    This is not a typical PyTorch format dataset class. It is intended for storing metadata and able
+    to return a list of examples for future usage e.g. filtering examples without valid annotations.
+    Then we can use DatasetFromList to build a PyTorch format dataset class.
 
     Examples:
 
     .. code-block:: python
 
-        dataset = DatasetFromList(vision_dataset_instance.get_examples())
+        examples = vision_dataset_instance.get_examples()
+        # some other operations
+        dataset = DatasetFromList(examples)
     """
 
     @property
@@ -117,7 +116,10 @@ class VisionDataset(object, metaclass=ABCMeta):
 
     @abstractmethod
     def get_examples(self) -> List[Any]:
-        """
-        Returns all examples as a list.
-        """
+        """Returns all examples as a list."""
         raise NotImplementedError
+
+    def __repr__(self):
+        return '{}(metadata={})'.format(self.__class__.__name__, self.metadata)
+
+    __str__ = __repr__
