@@ -5,7 +5,7 @@ repos:
   hooks:
     - id: flake8
       args: [
-        '--ignore=E203,E266,E501,W503,E221',
+        '--ignore=E203,E266,E501,W503,W504,E221',
         '--max-line-length=100',
         '--max-complexity=18',
         '--select=B,C,E,F,W,T4,B9',

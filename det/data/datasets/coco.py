@@ -4,16 +4,15 @@
 from __future__ import absolute_import, division, print_function
 
 import contextlib
-import copy
 import io
 import logging
 import os.path as osp
 from typing import Dict, List, Optional
 
-import foundation as fdn
-import numpy as np
 from foundation.utils import Timer
+from pycocotools.coco import COCO
 
+from ...structures import BoxMode
 from .base import Metadata, VisionDataset, VisionDatasetStash
 
 logger = logging.getLogger(__name__)
@@ -46,12 +45,15 @@ class COCOInstance(VisionDataset):
                 "segmentation"). The values for these keys will be returned as-is. For example, the
                 densepose annotations are loaded in this way.
             metadata: If provided, it should be consistent with the information in json file.
+                Otherwise, information in this json file will be loaded.
         """
         self._image_root = image_root
         self._json_file = json_file
-        self._extra_annotation_keys = extra_annotation_keys
+
+        self._extra_annotation_keys = extra_annotation_keys or []
         self._metadata = metadata if metadata is not None else Metadata()
 
+        # Update dataset metadata
         self._metadata.set(**dict(
             image_root=image_root,
             json_file=json_file,
@@ -61,177 +63,143 @@ class COCOInstance(VisionDataset):
     def metadata(self) -> Metadata:
         return self._metadata
 
-    def get_examples(self) -> List[Dict]:
-        from pycocotools.coco import COCO
+    def _load_categories(self, coco_api: COCO) -> None:
+        """Loads categories into :attr:`_metadata`."""
+        cat_ids = sorted(coco_api.getCatIds())
+        cats = coco_api.loadCats(cat_ids)
+        # The categories in a custom json file may not be sorted.
+        thing_classes = [c['name'] for c in sorted(cats, key=lambda x: x['id'])]
+        self._metadata.thing_classes = thing_classes
 
+        # In COCO, certain category ids are artificially removed, and by convention they are always
+        # ignored. We deal with COCO's id issue and translate the category ids to contiguous ids in
+        # [0, 80).
+
+        # It works by looking at the "categories" field in the json, therefore if users' own json
+        # also have incontiguous ids, we'll apply this mapping as well but print a warning.
+        if not (min(cat_ids) == 1 and max(cat_ids) == len(cat_ids)):
+            logger.warning(
+                'Category ids in annotation are not in [1, #categories]! A mapping will be applied.'
+            )
+        id_map = {v: i for i, v in enumerate(cat_ids)}
+        self._metadata.thing_dataset_id_to_contiguous_id = id_map
+
+    def get_examples(self) -> List[Dict]:
         timer = Timer()
-        with contextlib.redirect_stdout(io.StringIO()):
+        with contextlib.redirect_stdout(io.StringIO()):  # omit messages printed by COCO
             coco_api = COCO(self._json_file)
         if timer.seconds() > 1:
             logger.info('Loading {} takes {:.2f} seconds'.format(self._json_file, timer.seconds()))
 
-        cat_ids = coco_api.getCatIds()
-        cats = coco_api.loadCats(cat_ids)
-        print(cats)
+        self._load_categories(coco_api)
+        id_map = self._metadata.thing_dataset_id_to_contiguous_id
 
+        # sort indices for reproducible results
+        image_ids = sorted(coco_api.getImgIds())
+        # images is a list of dicts, each looks something like:
+        # {'license': 4,
+        #  'url': 'http://farm6.staticflickr.com/5454/9413846304_881d5e5c3b_z.jpg',
+        #  'file_name': 'COCO_val2014_000000001268.jpg',
+        #  'height': 427,
+        #  'width': 640,
+        #  'date_captured': '2013-11-17 05:57:24',
+        #  'id': 1268}
+        images = coco_api.loadImgs(image_ids)
+        # anns is a list[list[dict]], where each dict is an annotation
+        # record for an object. The inner list enumerates the objects in an image
+        # and the outer list enumerates over images. Example of anns[0]:
+        # [{'segmentation': [[192.81,
+        #     247.09,
+        #     ...
+        #     219.03,
+        #     249.06]],
+        #   'area': 1035.749,
+        #   'iscrowd': 0,
+        #   'image_id': 1268,
+        #   'bbox': [192.81, 224.8, 74.73, 33.43],
+        #   'category_id': 16,
+        #   'id': 42986},
+        #  ...]
+        anns = [coco_api.imgToAnns[img_id] for img_id in image_ids]
 
-@VisionDatasetStash.register('CocoDetection')
-class CocoDetection(VisionDataset):
-    """MSCOCO detection dataset.
+        if 'minival' not in self._json_file:
+            # The popular valminusminival & minival annotations for COCO2014 contain this bug.
+            # However the ratio of buggy annotations there is tiny and does not affect accuracy.
+            # Therefore we explicitly white-list them.
+            ann_ids = [ann['id'] for anns_per_image in anns for ann in anns_per_image]
+            assert len(set(ann_ids)) == len(ann_ids), \
+                'Annotation ids in \'{}\' are not unique!'.format(self._json_file)
 
-    Args:
-        root (str): The root path of dataset.
-        ann_file (str): The annotations file.
-        image_prefix (str, optional): Image file prefix.
-        min_object_area(float, optional): Minimum ground truth area, the objects' area
-            less than this threshold will be ignored. Default: 0
-        use_crowd (bool, optional): Whether use instances annotated as crowd. Default:
-            ``True``
-        infer_mode (bool, optional): In inference mode, will not filter images and
-            load labels. Default: ``False``
-        transform (callable, optional): A function takes item as input and return
-            transformed item.
-    """
-
-    CLASSES = (
-        'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
-        'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',
-        'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack',
-        'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
-        'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
-        'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
-        'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair',
-        'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote',
-        'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book',
-        'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
-    )
-
-    def __init__(
-        self,
-        root,
-        ann_file,
-        image_prefix='',
-        min_object_area=0.,
-        use_crowd=True,
-        infer_mode=False,
-        transform=None
-    ):
-        from pycocotools.coco import COCO
-
-        super(CocoDetection, self).__init__(root, ann_file)
-
-        self._root = root
-        self._ann_file = ann_file
-        self._image_prefix = image_prefix
-        self._min_object_area = min_object_area
-        self._use_crowd = use_crowd
-        self._infer_mode = infer_mode
-        self._transform = transform
-
-        # Load annotation file
-        self._coco = COCO(ann_file)
-        category_ids = sorted(self._coco.getCatIds())
-        categories = [c['name'] for c in self._coco.loadCats(category_ids)]
-        if not tuple(categories) == self.classes:
-            raise ValueError('Incompatible category names with {}'.format(self.__class__.__name__))
-        self.json_id_to_contiguous = {v: i for i, v in enumerate(category_ids)}
-        self.contiguous_id_to_json = {i: v for i, v in enumerate(category_ids)}
-
-        self._items, self._flags = self._get_items()
-
-    @property
-    def classes(self):
-        return self.CLASSES
-
-    @property
-    def aspect_ratio_flag(self):
-        return self._flags
-
-    def __getitem__(self, index):
-        # Deep copy the item to avoid change the raw data
-        item = copy.deepcopy(self._items[index])
-
-        # Image with uint8 dtype and shape (h, w, c) where c in *B G R* order
-        image = fdn.io.imread(item.pop('image_path'))
-        # Convert *B G R* to *R G B* order
-        item['image'] = fdn.ops.bgr2rgb(image)
-
-        # Check image size
-        assert image.shape[:2] == item['ori_shape']
-
-        if self._transform is not None:
-            item = self._transform(item)
-        return item
-
-    def __len__(self):
-        return len(self._items)
-
-    def _get_items(self):
-        """Loads images and labels from annotation file."""
-        # FIXME: use 100 images for debug
-        image_ids = sorted(self._coco.getImgIds())[:100]
-
-        logger.info('Loaded {} images from {}'.format(len(image_ids), self._ann_file))
-
-        items, flags = [], []
-        for image_id in image_ids:
-            entry = self._coco.loadImgs(image_id)[0]
-            image_path = osp.join(self._root, self._image_prefix + entry['file_name'])
-            fdn.utils.check_file_exist(image_path, '{}: No such image')
-
-            # Image information
-            item = {
-                'id': entry['id'],
-                'image_path': image_path,
-                'ori_shape': (entry['height'], entry['width']),
-            }
-            # Annotations
-            if not self._infer_mode:
-                target = self._load_annotations(entry)
-                if target is None:
-                    logger.warning(
-                        '{}: Skip the image since it has no valid annotations'.format(image_path)
-                    )
-                    continue
-                item['bboxes'] = target['bboxes']
-                item['labels'] = target['labels']
-
-            items.append(item)
-            # Aspect ratio flag
-            flags.append(1 if entry['width'] > entry['height'] else 0)
+        images_anns = list(zip(images, anns))
 
         logger.info(
-            'Removed {} images with no valid annotations. {} images left'.format(
-                len(image_ids) - len(items), len(items)
-            )
+            'Loaded {} images in COCO format from {}'.format(len(images_anns), self._json_file)
         )
 
-        return items, flags
+        dataset_dicts = []
 
-    def _load_annotations(self, entry):
-        """Loads ground-truth annotations for given image."""
-        ann_ids = self._coco.getAnnIds(imgIds=entry['id'], iscrowd=None)
-        instances = self._coco.loadAnns(ann_ids)
+        ann_keys = ['iscrowd', 'bbox', 'keypoints', 'category_id'] + self._extra_annotation_keys
 
-        bboxes, labels = [], []
-        for inst in instances:
-            if inst.get('ignore', False):
-                continue
-            if inst['area'] < self._min_object_area:
-                continue
-            if not self._use_crowd and inst.get('iscrowd', 0):
-                continue
+        num_instances_without_valid_segmentation = 0
 
-            xyxy = fdn.ops.xywh_to_xyxy(inst['bbox'])
-            x1, y1, x2, y2 = fdn.ops.clip_xyxy(xyxy, (entry['height'], entry['width']))
-            if inst['area'] > 0 and x2 > x1 and y2 > y1:
-                contiguous_id = self.json_id_to_contiguous[inst['category_id']]
-                bboxes.append([x1, y1, x2, y2])
-                labels.append(contiguous_id)
+        for image_dict, ann_dict_list in images_anns:
+            record = {}
 
-        if len(bboxes) == 0:
-            return None
+            file_name = osp.join(self._image_root, image_dict['file_name'])
+            if not osp.isfile(file_name):
+                raise FileNotFoundError('{}: No such image'.format(file_name))
 
-        bboxes = np.array(bboxes, dtype=np.float32)
-        labels = np.array(labels, dtype=np.int32)
-        return {'bboxes': bboxes, 'labels': labels}
+            record['file_name'] = file_name
+            record['height'] = image_dict['height']
+            record['width'] = image_dict['width']
+            image_id = record['image_id'] = image_dict['id']
+
+            objs = []
+            for ann in ann_dict_list:
+                # Check that the image_id in this annotation is the same as
+                # the image_id we're looking at.
+                # This fails only when the data parsing logic or the annotation file is buggy.
+
+                # The original COCO valminusminival2014 & minival2014 annotation files
+                # actually contains bugs that, together with certain ways of using COCO API,
+                # can trigger this assertion.
+                assert ann['image_id'] == image_id
+
+                assert ann.get('ignore', 0) == 0, '"ignore" in COCO json file is not supported.'
+
+                obj = {key: ann[key] for key in ann_keys if key in ann}
+
+                segm = ann.get('segmentation', None)
+                if segm:  # either list[list[float]] or dict(RLE)
+                    if not isinstance(segm, dict):
+                        # filter out invalid polygons (< 3 points)
+                        segm = [poly for poly in segm if len(poly) % 2 == 0 and len(poly) >= 6]
+                        if len(segm) == 0:
+                            num_instances_without_valid_segmentation += 1
+                            continue  # ignore this instance
+                    obj['segmentation'] = segm
+
+                keypts = ann.get('keypoints', None)
+                if keypts:  # list[int]
+                    for idx, v in enumerate(keypts):
+                        if idx % 3 != 2:
+                            # COCO's segmentation coordinates are floating points in [0, H or W],
+                            # but keypoint coordinates are integers in [0, H-1 or W-1]
+                            # Therefore we assume the coordinates are "pixel indices" and
+                            # add 0.5 to convert to floating point coordinates.
+                            keypts[idx] = v + 0.5
+                    obj['keypoints'] = keypts
+
+                obj['bbox_mode'] = BoxMode.XYWH_ABS
+                obj['category_id'] = id_map[obj['category_id']]
+                objs.append(obj)
+            record['annotations'] = objs
+            dataset_dicts.append(record)
+
+        if num_instances_without_valid_segmentation > 0:
+            logger.warning(
+                'Filtered out {} instances without valid segmentation. '
+                'There might be issues in your dataset generation process.'
+                .format(num_instances_without_valid_segmentation)
+            )
+        return dataset_dicts

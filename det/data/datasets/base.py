@@ -8,7 +8,12 @@ from typing import Any, Dict, List
 
 from foundation.registry import Registry
 
-__all__ = ['MetadataStash', 'Metadata', 'VisionDatasetStash', 'VisionDataset']
+__all__ = [
+    'MetadataStash',
+    'Metadata',
+    'VisionDatasetStash',
+    'VisionDataset',
+]
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +63,12 @@ class Metadata(types.SimpleNamespace):
         # Ensure that metadata of the same name stays consistent
         try:
             old_val = getattr(self, key)
-            assert old_val == val, (
-                "Attribute '{}' in the metadata of '{}' cannot be set "
-                'to a different value!\n{} != {}'.format(key, self.name, old_val, val)
-            )
+            if old_val != val:
+                raise ValueError(
+                    'Attribute \'{}\' cannot be set to a different value!\n{}!={}'.format(
+                        key, old_val, val
+                    )
+                )
         except AttributeError:
             super().__setattr__(key, val)
 
