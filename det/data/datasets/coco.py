@@ -65,24 +65,22 @@ class COCOInstance(VisionDataset):
 
     def _load_categories(self, coco_api: COCO) -> None:
         """Loads categories into :attr:`_metadata`."""
+        # The categories in a custom json file may not be sorted.
         cat_ids = sorted(coco_api.getCatIds())
         cats = coco_api.loadCats(cat_ids)
-        # The categories in a custom json file may not be sorted.
-        thing_classes = [c['name'] for c in sorted(cats, key=lambda x: x['id'])]
+        thing_classes = [c['name'] for c in cats]
         self._metadata.thing_classes = thing_classes
 
         # In COCO, certain category ids are artificially removed, and by convention they are always
         # ignored. We deal with COCO's id issue and translate the category ids to contiguous ids in
-        # [0, 80).
-
-        # It works by looking at the "categories" field in the json, therefore if users' own json
-        # also have incontiguous ids, we'll apply this mapping as well but print a warning.
-        if not (min(cat_ids) == 1 and max(cat_ids) == len(cat_ids)):
-            logger.warning(
-                'Category ids in annotation are not in [1, #categories]! A mapping will be applied.'
-            )
+        # [0, 80). It works by looking at the "categories" field in the json, therefore if users'
+        # own json also have incontiguous ids, we'll apply this mapping as well.
         id_map = {v: i for i, v in enumerate(cat_ids)}
         self._metadata.thing_dataset_id_to_contiguous_id = id_map
+
+        # Currently only person have keypoints.
+        if len(cats) == 1 and cats[0]['name'] == 'person' and 'keypoints' in cats[0]:
+            self._metadata.keypoint_names = cats[0]['keypoints']
 
     def get_examples(self) -> List[Dict]:
         timer = Timer()
