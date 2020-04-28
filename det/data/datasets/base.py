@@ -80,7 +80,7 @@ class Metadata(types.SimpleNamespace):
         return copy.copy(self.__dict__)
 
     def set(self, **kwargs: Any) -> 'Metadata':
-        """Set multiple metadata with kwargs."""
+        """Sets multiple metadata with kwargs."""
         for k, v in kwargs.items():
             setattr(self, k, v)
         return self
