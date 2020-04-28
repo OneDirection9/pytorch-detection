@@ -6,14 +6,14 @@ import pickle
 import random
 
 import numpy as np
-import torch.utils.data as data
+from torch.utils.data import Dataset
 
 __all__ = ['DatasetFromList']
 
 logger = logging.getLogger(__name__)
 
 
-class MapDataset(data.Dataset):
+class MapDataset(Dataset):
     """
     Map a function over the elements in a dataset.
 
@@ -59,20 +59,20 @@ class MapDataset(data.Dataset):
                 )
 
 
-class DatasetFromList(data.Dataset):
+class DatasetFromList(Dataset):
     """Wrap a list to a torch Dataset. It produces elements of the list as data."""
 
-    def __init__(self, lst: list, copying: bool = True, serialization: bool = True) -> None:
+    def __init__(self, lst: list, copy: bool = True, serialization: bool = True) -> None:
         """
         Args:
             lst: A list which contains elements to produce.
-            copying: Whether to deepcopy the element when producing it, so that the result can be
+            copy: Whether to deepcopy the element when producing it, so that the result can be
                 modified in place without affecting the source in the list.
             serialization: Whether to hold memory using serialized objects, when enabled, data loader
                 workers can use shared RAM from master process instead of making a copy.
         """
         self._lst = lst
-        self._copying = copying
+        self._copy = copy
         self._serialization = serialization
 
         def _serialize(data):
@@ -102,8 +102,11 @@ class DatasetFromList(data.Dataset):
             start_addr = 0 if idx == 0 else self._addr[idx - 1].item()
             end_addr = self._addr[idx].item()
             bytes = memoryview(self._lst[start_addr:end_addr])
-            return pickle.loads(bytes)
-        elif self._copying:
-            return copy.deepcopy(self._lst[idx])
+            item = pickle.loads(bytes)
         else:
-            return self._lst[idx]
+            item = self._lst[idx]
+
+        if self._copy:
+            return copy.deepcopy(item)
+        else:
+            return item
