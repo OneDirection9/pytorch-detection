@@ -26,7 +26,7 @@ class MetadataStash(Registry):
 class Metadata(types.SimpleNamespace):
     """A class that supports simple attribute setter/getter.
 
-    It is intended for storing metadata and as a attribute of a dataset.
+    It is intended for storing metadata and as a attribute of a :class:`VisionDataset`.
 
     Examples:
 
@@ -102,8 +102,9 @@ class VisionDataset(object, metaclass=ABCMeta):
     """Base vision dataset.
 
     This is not a typical PyTorch format dataset class. It is intended for storing metadata and able
-    to return a list of examples for future usage e.g. filtering examples without valid annotations.
-    Then we can use DatasetFromList to build a PyTorch format dataset class.
+    to produce a list of examples for future usage, e.g. filtering examples without valid
+    annotations, calculating image aspect ratio for grouping and so on. Then we can use
+    :class:`DatasetFromList` to build a PyTorch format dataset class.
 
     Examples:
 
