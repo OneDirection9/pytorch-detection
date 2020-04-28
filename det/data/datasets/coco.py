@@ -15,9 +15,9 @@ from pycocotools.coco import COCO
 from ...structures import BoxMode
 from .base import Metadata, VisionDataset, VisionDatasetStash
 
-logger = logging.getLogger(__name__)
-
 __all__ = ['COCOInstance']
+
+logger = logging.getLogger(__name__)
 
 
 @VisionDatasetStash.register('COCOInstance')
