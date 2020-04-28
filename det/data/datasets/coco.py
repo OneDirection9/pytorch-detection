@@ -63,25 +63,6 @@ class COCOInstance(VisionDataset):
     def metadata(self) -> Metadata:
         return self._metadata
 
-    def _load_categories(self, coco_api: COCO) -> None:
-        """Loads categories into :attr:`_metadata`."""
-        # The categories in a custom json file may not be sorted.
-        cat_ids = sorted(coco_api.getCatIds())
-        cats = coco_api.loadCats(cat_ids)
-        thing_classes = [c['name'] for c in cats]
-        self._metadata.thing_classes = thing_classes
-
-        # In COCO, certain category ids are artificially removed, and by convention they are always
-        # ignored. We deal with COCO's id issue and translate the category ids to contiguous ids in
-        # [0, 80). It works by looking at the "categories" field in the json, therefore if users'
-        # own json also have incontiguous ids, we'll apply this mapping as well.
-        id_map = {v: i for i, v in enumerate(cat_ids)}
-        self._metadata.thing_dataset_id_to_contiguous_id = id_map
-
-        # Currently only person have keypoints.
-        if len(cats) == 1 and cats[0]['name'] == 'person' and 'keypoints' in cats[0]:
-            self._metadata.keypoint_names = cats[0]['keypoints']
-
     def get_examples(self) -> List[Dict]:
         timer = Timer()
         with contextlib.redirect_stdout(io.StringIO()):  # omit messages printed by COCO
@@ -89,8 +70,21 @@ class COCOInstance(VisionDataset):
         if timer.seconds() > 1:
             logger.info('Loading {} takes {:.2f} seconds'.format(self._json_file, timer.seconds()))
 
-        self._load_categories(coco_api)
-        id_map = self._metadata.thing_dataset_id_to_contiguous_id
+        # The categories in a custom json file may not be sorted.
+        cat_ids = sorted(coco_api.getCatIds())
+        cats = coco_api.loadCats(cat_ids)
+        thing_classes = [c['name'] for c in cats]
+        self._metadata.thing_classes = thing_classes
+
+        # In COCO, certain category ids are artificially removed, and by convention they are always
+        # ignored. We deal with COCO's id issue and translate the category ids to 0-indexed
+        # contiguous ids, i.e. [0, 80).
+        id_map = {v: i for i, v in enumerate(cat_ids)}
+        self._metadata.thing_dataset_id_to_contiguous_id = id_map
+
+        # Currently only "person" has keypoints.
+        if len(cats) == 1 and cats[0]['name'] == 'person' and 'keypoints' in cats[0]:
+            self._metadata.keypoint_names = cats[0]['keypoints']
 
         # sort indices for reproducible results
         image_ids = sorted(coco_api.getImgIds())
@@ -103,44 +97,16 @@ class COCOInstance(VisionDataset):
         #  'date_captured': '2013-11-17 05:57:24',
         #  'id': 1268}
         images = coco_api.loadImgs(image_ids)
-        # anns is a list[list[dict]], where each dict is an annotation
-        # record for an object. The inner list enumerates the objects in an image
-        # and the outer list enumerates over images. Example of anns[0]:
-        # [{'segmentation': [[192.81,
-        #     247.09,
-        #     ...
-        #     219.03,
-        #     249.06]],
-        #   'area': 1035.749,
-        #   'iscrowd': 0,
-        #   'image_id': 1268,
-        #   'bbox': [192.81, 224.8, 74.73, 33.43],
-        #   'category_id': 16,
-        #   'id': 42986},
-        #  ...]
-        anns = [coco_api.imgToAnns[img_id] for img_id in image_ids]
 
-        if 'minival' not in self._json_file:
-            # The popular valminusminival & minival annotations for COCO2014 contain this bug.
-            # However the ratio of buggy annotations there is tiny and does not affect accuracy.
-            # Therefore we explicitly white-list them.
-            ann_ids = [ann['id'] for anns_per_image in anns for ann in anns_per_image]
-            assert len(set(ann_ids)) == len(ann_ids), \
-                'Annotation ids in \'{}\' are not unique!'.format(self._json_file)
-
-        images_anns = list(zip(images, anns))
-
-        logger.info(
-            'Loaded {} images in COCO format from {}'.format(len(images_anns), self._json_file)
-        )
+        logger.info('Loaded {} images in COCO format from {}'.format(len(images), self._json_file))
 
         dataset_dicts = []
 
-        ann_keys = ['iscrowd', 'bbox', 'keypoints', 'category_id'] + self._extra_annotation_keys
+        ann_keys = ['iscrowd', 'bbox', 'category_id'] + self._extra_annotation_keys
 
         num_instances_without_valid_segmentation = 0
 
-        for image_dict, ann_dict_list in images_anns:
+        for image_dict in images:
             record = {}
 
             file_name = osp.join(self._image_root, image_dict['file_name'])
@@ -152,15 +118,32 @@ class COCOInstance(VisionDataset):
             record['width'] = image_dict['width']
             image_id = record['image_id'] = image_dict['id']
 
+            # ann_dict_list is a list[dict], where each dict is an annotation record for an object.
+            # The inner list enumerates the objects in an image and the outer list enumerates over
+            # images. Example of anns[0]:
+            # [{'segmentation': [[192.81,
+            #     247.09,
+            #     ...
+            #     219.03,
+            #     249.06]],
+            #   'area': 1035.749,
+            #   'iscrowd': 0,
+            #   'image_id': 1268,
+            #   'bbox': [192.81, 224.8, 74.73, 33.43],
+            #   'category_id': 16,
+            #   'id': 42986},
+            #  ...]
+            ann_ids = coco_api.getAnnIds(imgIds=image_id)
+            ann_dict_list = coco_api.loadAnns(ann_ids)
+
             objs = []
             for ann in ann_dict_list:
-                # Check that the image_id in this annotation is the same as
-                # the image_id we're looking at.
-                # This fails only when the data parsing logic or the annotation file is buggy.
+                # Check the image_id in this annotation is the same as the image_id we're looking
+                # at. This fails only when the data parsing logic or the annotation file is buggy.
 
-                # The original COCO valminusminival2014 & minival2014 annotation files
-                # actually contains bugs that, together with certain ways of using COCO API,
-                # can trigger this assertion.
+                # The original COCO valminusminival2014 & minival2014 annotation files actually
+                # contains bugs that, together with certain ways of using COCO API, can trigger this
+                # assertion.
                 assert ann['image_id'] == image_id
 
                 assert ann.get('ignore', 0) == 0, '"ignore" in COCO json file is not supported.'
@@ -182,9 +165,9 @@ class COCOInstance(VisionDataset):
                     for idx, v in enumerate(keypts):
                         if idx % 3 != 2:
                             # COCO's segmentation coordinates are floating points in [0, H or W],
-                            # but keypoint coordinates are integers in [0, H-1 or W-1]
-                            # Therefore we assume the coordinates are "pixel indices" and
-                            # add 0.5 to convert to floating point coordinates.
+                            # but keypoint coordinates are integers in [0, H-1 or W-1] Therefore we
+                            # assume the coordinates are "pixel indices" and add 0.5 to convert to
+                            # floating point coordinates.
                             keypts[idx] = v + 0.5
                     obj['keypoints'] = keypts
 

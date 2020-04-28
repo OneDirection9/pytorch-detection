@@ -151,7 +151,7 @@ COCO_CATEGORIES = [
     {'color': [250, 141, 255], 'isthing': 0, 'id': 200, 'name': 'rug-merged'},
 ]
 
-COCO_PERSON_KEYPOINT_NAMES = (
+COCO_PERSON_KEYPOINT_NAMES = [
     'nose',
     'left_eye', 'right_eye',
     'left_ear', 'right_ear',
@@ -161,10 +161,10 @@ COCO_PERSON_KEYPOINT_NAMES = (
     'left_hip', 'right_hip',
     'left_knee', 'right_knee',
     'left_ankle', 'right_ankle',
-)
+]
 
 # Pairs of keypoints that should be exchanged under horizontal flipping
-COCO_PERSON_KEYPOINT_FLIP_MAP = (
+COCO_PERSON_KEYPOINT_FLIP_MAP = [
     ('left_eye', 'right_eye'),
     ('left_ear', 'right_ear'),
     ('left_shoulder', 'right_shoulder'),
@@ -173,7 +173,7 @@ COCO_PERSON_KEYPOINT_FLIP_MAP = (
     ('left_hip', 'right_hip'),
     ('left_knee', 'right_knee'),
     ('left_ankle', 'right_ankle'),
-)
+]
 
 # Rules for pairs of keypoints to draw a line between, and the line color to use.
 COCO_PERSON_KEYPOINT_CONNECTION_RULES = [
