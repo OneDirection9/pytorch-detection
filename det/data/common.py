@@ -1,41 +1,43 @@
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+#
+# Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
 import copy
 import logging
 import pickle
 import random
+from typing import Any, Callable
 
 import numpy as np
 from torch.utils.data import Dataset
 
-__all__ = ['DatasetFromList']
+__all__ = ['MapDataset', 'DatasetFromList']
 
 logger = logging.getLogger(__name__)
 
 
 class MapDataset(Dataset):
-    """
-    Map a function over the elements in a dataset.
+    """A class that map a function over the elements in a dataset.
 
     Args:
-        dataset: a dataset where map function is applied.
-        map_func: a callable which maps the element in dataset. map_func is
-            responsible for error handling, when error happens, it needs to
-            return None so the MapDataset will randomly use other
-            elements from the dataset.
+        dataset: A dataset where map function is applied.
+        map_func: A callable which maps the element in dataset. map_func is responsible for error
+            handling, when error happens, it needs to return None so the MapDataset will randomly
+            use other elements from the dataset.
     """
 
-    def __init__(self, dataset, map_func):
+    def __init__(self, dataset: Dataset, map_func: Callable) -> None:
         self._dataset = dataset
         self._map_func = map_func
 
         self._rng = random.Random(42)
         self._fallback_candidates = set(range(len(dataset)))
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._dataset)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Any:
         retry_count = 0
         cur_idx = int(idx)
 
@@ -51,7 +53,6 @@ class MapDataset(Dataset):
             cur_idx = self._rng.sample(self._fallback_candidates, k=1)[0]
 
             if retry_count >= 3:
-                logger = logging.getLogger(__name__)
                 logger.warning(
                     'Failed to apply `_map_func` for idx: {}, retry count: {}'.format(
                         idx, retry_count
@@ -71,37 +72,37 @@ class DatasetFromList(Dataset):
             serialization: Whether to hold memory using serialized objects, when enabled, data
                 loader workers can use shared RAM from master process instead of making a copy.
         """
-        self._lst = lst
         self._copy = copy
         self._serialization = serialization
 
-        def _serialize(data):
+        def _serialize(data: Any) -> np.ndarray:
             buffer = pickle.dumps(data, protocol=-1)
             return np.frombuffer(buffer, dtype=np.uint8)
 
-        if self._serialization:
+        if serialization:
             logger.info(
                 'Serializing {} elements to byte tensors and concatenating them all ...'.format(
-                    len(self._lst)
+                    len(lst)
                 )
             )
-            self._lst = [_serialize(x) for x in self._lst]
-            self._addr = np.asarray([len(x) for x in self._lst], dtype=np.int64)
-            self._addr = np.cumsum(self._addr)
-            self._lst = np.concatenate(self._lst)
+            lst = [_serialize(x) for x in lst]
+            self._addr = np.cumsum(np.asarray([len(x) for x in lst], dtype=np.int64))
+            self._lst = np.concatenate(lst)
             logger.info('Serialized dataset takes {:.2f} MiB'.format(len(self._lst) / 1024 ** 2))
+        else:
+            self._lst = lst
 
-    def __len__(self):
+    def __len__(self) -> int:
         if self._serialization:
             return len(self._addr)
         else:
             return len(self._lst)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Any:
         if self._serialization:
             start_addr = 0 if idx == 0 else self._addr[idx - 1].item()
             end_addr = self._addr[idx].item()
-            v = memoryview(self._lst[start_addr:end_addr])
+            v = bytes(memoryview(self._lst[start_addr:end_addr]))
             item = pickle.loads(v)
         else:
             item = self._lst[idx]

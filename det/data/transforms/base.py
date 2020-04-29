@@ -9,7 +9,7 @@ class TransformRegistry(Registry):
     pass
 
 
-class WrappedTransform(object):
+class RandomTransform(object):
     """Transform which takes a dataset dict in Detectron2 Dataset format and map it."""
 
     def get_transform(self) -> Transform:
