@@ -51,7 +51,7 @@ class Metadata(types.SimpleNamespace):
 
         raise AttributeError(
             "Attribute '{}' does not exist in the metadata. Available keys are {}.".format(
-                key, str(self.__dict__.keys())
+                key, list(self.__dict__.keys())
             )
         )
 
@@ -99,10 +99,10 @@ class VisionDatasetStash(Registry):
 
 
 class VisionDataset(object, metaclass=ABCMeta):
-    """Base vision dataset.
+    """Basic class of vision dataset.
 
-    This is not a typical PyTorch format dataset class. It is intended for storing metadata and able
-    to produce a list of examples for future usage, e.g. filtering examples without valid
+    This is not a typical PyTorch format dataset class. It is intended for storing metadata and
+    producing a list of examples for future usage, e.g. filtering examples without valid
     annotations, calculating image aspect ratio for grouping and so on. Then we can use
     :class:`DatasetFromList` to build a PyTorch format dataset class.
 
@@ -111,7 +111,7 @@ class VisionDataset(object, metaclass=ABCMeta):
     .. code-block:: python
 
         examples = vision_dataset_instance.get_examples()
-        # some other operations
+        # some operations
         dataset = DatasetFromList(examples)
     """
 
