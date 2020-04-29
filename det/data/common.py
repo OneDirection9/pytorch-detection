@@ -60,7 +60,7 @@ class MapDataset(Dataset):
 
 
 class DatasetFromList(Dataset):
-    """Wrap a list to a torch Dataset. It produces elements of the list as data."""
+    """A class that wrap a list to a torch Dataset. It produces elements of the list as data."""
 
     def __init__(self, lst: list, copy: bool = True, serialization: bool = True) -> None:
         """
@@ -68,8 +68,8 @@ class DatasetFromList(Dataset):
             lst: A list which contains elements to produce.
             copy: Whether to deepcopy the element when producing it, so that the result can be
                 modified in place without affecting the source in the list.
-            serialization: Whether to hold memory using serialized objects, when enabled, data loader
-                workers can use shared RAM from master process instead of making a copy.
+            serialization: Whether to hold memory using serialized objects, when enabled, data
+                loader workers can use shared RAM from master process instead of making a copy.
         """
         self._lst = lst
         self._copy = copy
@@ -89,7 +89,7 @@ class DatasetFromList(Dataset):
             self._addr = np.asarray([len(x) for x in self._lst], dtype=np.int64)
             self._addr = np.cumsum(self._addr)
             self._lst = np.concatenate(self._lst)
-            logger.info('Serialized dataset takes {:.2f} MiB'.format(len(self._lst) / 1024**2))
+            logger.info('Serialized dataset takes {:.2f} MiB'.format(len(self._lst) / 1024 ** 2))
 
     def __len__(self):
         if self._serialization:
@@ -101,8 +101,8 @@ class DatasetFromList(Dataset):
         if self._serialization:
             start_addr = 0 if idx == 0 else self._addr[idx - 1].item()
             end_addr = self._addr[idx].item()
-            bytes = memoryview(self._lst[start_addr:end_addr])
-            item = pickle.loads(bytes)
+            v = memoryview(self._lst[start_addr:end_addr])
+            item = pickle.loads(v)
         else:
             item = self._lst[idx]
 
