@@ -7,7 +7,7 @@ import contextlib
 import io
 import logging
 import os.path as osp
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from foundation.utils import Timer
 from pycocotools.coco import COCO
@@ -63,7 +63,7 @@ class COCOInstance(VisionDataset):
     def metadata(self) -> Metadata:
         return self._metadata
 
-    def get_examples(self) -> List[Dict]:
+    def get_examples(self) -> List[Dict[str, Any]]:
         timer = Timer()
         with contextlib.redirect_stdout(io.StringIO()):  # omit messages printed by COCO
             coco_api = COCO(self._json_file)
@@ -162,6 +162,10 @@ class COCOInstance(VisionDataset):
 
                 keypts = ann.get('keypoints', None)
                 if keypts:  # list[int]
+                    # Each keypoints field has the format [x1, y1, v1, ...], where v is visibility.
+                    #   v = 0: not labeled (in which case x=y=0);
+                    #   v = 1: labeled but not visible;
+                    #   v = 2: labeled and visible.
                     for idx, v in enumerate(keypts):
                         if idx % 3 != 2:
                             # COCO's segmentation coordinates are floating points in [0, H or W],

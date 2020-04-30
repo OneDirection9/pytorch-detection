@@ -1,17 +1,19 @@
-dataset:
+datasets:
   train:
-    name: CocoDetection
-    root: ./data/MSCOCO/train2014
-    ann_file: ./data/MSCOCO/annotations/instances_train2014.json
-    transform:
-      name: FasterRCNNTrainTransform
-
-  test: # [optional]: no evaluation when not provided
-    name: CocoDetection
-    root: ./data/MSCOCO/val2014
-    ann_file: ./data/MSCOCO/annotations/instances_val2014.json
-    transform:
-      name: FasterRCNNValTransform
+    - name: COCOInstance
+      json_file: ./data/MSCOCO/annotations/instances_train2017.json
+      image_root: ./data/MSCOCO/train2017/
+      metadata:
+        name: COCOInstanceMetadata
+#    - name: COCOInstance
+#      json_file: ./data/MSCOCO/annotations/instances_train2017.json
+#      image_root: ./data/MSCOCO/train2017/
+#      metadata:
+#        name: COCOInstanceMetadata
+  train_pipeline:
+    - name: CrowdFilter
+    - name: FewKeypointsFilter
+      min_keypoints_per_image: 0
 
 dataloader:
   images_per_gpu: 2

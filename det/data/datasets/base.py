@@ -46,7 +46,7 @@ class Metadata(types.SimpleNamespace):
 
     def __getattr__(self, key: str) -> Any:
         if key in self._RENAMED:
-            logger.warning('Metadata \'{}\' was renamed to \'{}\'!'.format(key, self._RENAMED[key]))
+            logger.warning("Metadata '{}' was renamed to '{}'!".format(key, self._RENAMED[key]))
             return getattr(self, self._RENAMED[key])
 
         raise AttributeError(
@@ -57,7 +57,7 @@ class Metadata(types.SimpleNamespace):
 
     def __setattr__(self, key: str, val: Any) -> None:
         if key in self._RENAMED:
-            logger.warning('Metadata \'{}\' was renamed to \'{}\'!'.format(key, self._RENAMED[key]))
+            logger.warning("Metadata '{}' was renamed to '{}'!".format(key, self._RENAMED[key]))
             setattr(self, self._RENAMED[key], val)
 
         # Ensure that metadata of the same name stays consistent
@@ -65,7 +65,7 @@ class Metadata(types.SimpleNamespace):
             old_val = getattr(self, key)
             if old_val != val:
                 raise ValueError(
-                    'Attribute \'{}\' cannot be set to a different value!\n{}!={}'.format(
+                    "Attribute '{}' cannot be set to a different value!\n{}!={}".format(
                         key, old_val, val
                     )
                 )
@@ -99,11 +99,11 @@ class VisionDatasetStash(Registry):
 
 
 class VisionDataset(object, metaclass=ABCMeta):
-    """Basic class of vision dataset.
+    """Base vision dataset class.
 
     This is not a typical PyTorch format dataset class. It is intended for storing metadata and
     producing a list of examples for future usage, e.g. filtering examples without valid
-    annotations, calculating image aspect ratio for grouping and so on. Then we can use
+    annotations, calculating image aspect ratio for grouping, and so on. Then we can use
     :class:`DatasetFromList` to build a PyTorch format dataset class.
 
     Examples:

@@ -2,6 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 import inspect
 from abc import ABCMeta, abstractmethod
+from typing import Any, Optional
 
 from foundation.registry import Registry
 
@@ -14,17 +15,27 @@ class PipelineRegistry(Registry):
 
 
 class Pipeline(object, metaclass=ABCMeta):
-    """Basic class for pipeline function.
+    """Base pipeline class.
 
-    Takes one example from datasets as input and process it. When it returns None the item should be
-    skipped.
+    A pipeline takes a single example produced by the :class:`VisionDataset` as input and returns
+    processed example or None. When returning None, the example should be ignored.
+
+    Typical pipeline use cases are filtering out invalid examples, converting to the format accepted
+    by downstream modules, and so on.
+
+    Note that don't load image in pipeline step, in map_func instead. Because the examples returned
+    by pipeline should be passed to :class:`DatasetFromList`.
     """
 
+    def __init__(self):
+        """Rewrites it to avoid raise AssertionError in :meth:`__repr__` due to *args, **kwargs."""
+        pass
+
     @abstractmethod
-    def __call__(self, example):
+    def __call__(self, example: Any) -> Optional[Any]:
         raise NotImplementedError
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Produces something like:
         MyPipeline(field1={self._field1}, field2={self._field2})
         """
