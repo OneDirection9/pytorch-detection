@@ -62,8 +62,7 @@ class Pipeline(object, metaclass=ABCMeta):
     __str__ = __repr__
 
 
-@PipelineRegistry.register('compose')
-class Compose(Pipeline):
+class Compose(object):
     """Composes several pipelines together."""
 
     def __init__(self, pipelines: List[Pipeline]) -> None:
@@ -71,8 +70,6 @@ class Compose(Pipeline):
         Args:
             pipelines: List of pipelines which are executed one by one.
         """
-        super().__init__()
-
         for ppl in pipelines:
             if not isinstance(ppl, Pipeline):
                 raise TypeError('Expected Pipeline. Got {}'.format(type(ppl)))
