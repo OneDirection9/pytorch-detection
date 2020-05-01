@@ -25,9 +25,9 @@ class Pipeline(object, metaclass=ABCMeta):
     whole workflow.
 
     Notes:
-        Don't do heavy work in pipelines, such as loading images. Because the examples returned
-        by pipelines should be passed to :class:`DatasetFromList` to get a PyTorch format class.
-        If loaded images, the memory cost is expensive.
+        Don't do memory heavy work in pipelines, such as loading images. Because the examples
+        returned by pipelines should be passed to :class:`DatasetFromList` to get a PyTorch format
+        class. If loaded images, the memory cost is expensive.
     """
 
     def __init__(self):
