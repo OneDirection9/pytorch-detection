@@ -20,11 +20,11 @@ class Pipeline(object, metaclass=ABCMeta):
     A pipeline takes a single example produced by the :class:`VisionDataset` as input and returns
     processed example or None. When returning None, the example should be ignored.
 
-    Typical pipeline use cases are filtering out invalid examples, converting to the format accepted
-    by downstream modules, and so on.
+    Typical pipeline use cases are filtering out invalid annotations, converting loaded examples to
+    the format accepted by downstream modules, and so on, which are only need to do once.
 
     Note that don't load image in pipeline step, in map_func instead. Because the examples returned
-    by pipeline should be passed to :class:`DatasetFromList`.
+    by pipeline should be passed to :class:`DatasetFromList` to get a PyTorch format class.
     """
 
     def __init__(self):

@@ -1,9 +1,8 @@
 """
 The workflow of data is:
 
-1. Get dataset(s) from :class:`DatasetStash` which inheriting from :class:`VisionDataset`.
-2. Get pipeline(s) from :class:`PipelineStash` which inheriting from :class:`Pipeline`.
-3. Get examples from datasets and pass each example through pipeline(s).
+1. Get examples from one or more :class:`VisionDataset`.
+2. Passes each example through zero or more :class:`Pipeline`.
 """
 from __future__ import absolute_import, division, print_function
 
@@ -95,8 +94,6 @@ def get_dataset_examples(ds_cfg: _CfgType, ppl_cfg: Optional[_CfgType] = None) -
 
     if ppl_cfg is not None:
         pipelines = build_pipelines(ppl_cfg)
-        from ipdb import set_trace
-        set_trace()
 
         for ppl in pipelines:
             num_before = len(examples)
