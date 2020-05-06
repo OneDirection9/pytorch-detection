@@ -70,7 +70,7 @@ class InferenceSampler(Sampler):
     def __init__(self, size: int) -> None:
         """
         Args:
-            size (int): the total number of data of the underlying dataset to sample from
+            size: The total number of data of the underlying dataset to sample from.
         """
         self._size = size
         assert size > 0
