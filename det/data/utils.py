@@ -5,10 +5,22 @@ from typing import List
 
 from .datasets import VisionDataset
 
+__all__ = ['check_metadata_consistency']
+
 logger = logging.getLogger(__name__)
 
 
 def check_metadata_consistency(name: str, datasets: List[VisionDataset]) -> None:
+    """Checks that the datasets have consistent metadata.
+
+    Args:
+        name: A metadata key.
+        datasets: List of datasets.
+
+    Raises:
+        AttributeError: If the `name` does not exist in the metadata
+        ValueError: If the given datasets do not have the same metadata values defined by `name`.
+    """
     if len(datasets) == 0:
         return
 

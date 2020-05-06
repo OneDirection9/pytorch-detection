@@ -8,8 +8,8 @@ from .base import Metadata, MetadataStash
 __all__ = [
     'get_coco_instance_metadata',
     'get_coco_panoptic_metadata',
-    'get_coco_person',
-    'get_cityscapes',
+    'get_coco_person_metadata',
+    'get_cityscapes_metadata',
 ]
 
 # yapf: disable
@@ -270,7 +270,7 @@ def get_coco_panoptic_metadata() -> Metadata:
 
 
 @MetadataStash.register('COCOPersonMetadata')
-def get_coco_person() -> Metadata:
+def get_coco_person_metadata() -> Metadata:
     """Returns metadata of the keypoint dataset."""
     m = Metadata()
     m.set(
@@ -286,7 +286,7 @@ def get_coco_person() -> Metadata:
 
 
 @MetadataStash.register('Cityscapes')
-def get_cityscapes() -> Metadata:
+def get_cityscapes_metadata() -> Metadata:
     m = Metadata()
     m.set(**dict(
         thing_classes=CITYSCAPES_THING_CLASSES,

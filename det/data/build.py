@@ -14,6 +14,7 @@ from foundation.registry import build
 
 from .datasets import MetadataStash, VisionDataset, VisionDatasetStash
 from .pipelines import Pipeline, PipelineRegistry
+from .utils import check_metadata_consistency
 
 __all__ = [
     'build_vision_datasets',
@@ -110,5 +111,12 @@ def get_dataset_examples(ds_cfg: _CfgType, ppl_cfg: Optional[_CfgType] = None) -
 
             if len(examples) == 0:
                 raise ValueError('No examples left!')
+
+    has_instances = 'annotations' in examples[0]
+    if has_instances:
+        try:
+            check_metadata_consistency('thing_classes', datasets)
+        except AttributeError:  # class names are not available for this dataset
+            pass
 
     return examples
