@@ -52,8 +52,8 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
             cfg['metadata'] = build(MetadataStash, cfg['metadata'])
 
     # Build datasets
-    ds = [build(VisionDatasetStash, cfg) for cfg in ds_cfg]
-    return ds
+    datasets = [build(VisionDatasetStash, cfg) for cfg in ds_cfg]
+    return datasets
 
 
 def build_pipelines(ppl_cfg: _CfgType) -> List[Pipeline]:
@@ -71,8 +71,8 @@ def build_pipelines(ppl_cfg: _CfgType) -> List[Pipeline]:
         ppl_cfg = [ppl_cfg]
 
     # Build pipelines
-    ppl = [build(PipelineRegistry, cfg) for cfg in ppl_cfg]
-    return ppl
+    pipelines = [build(PipelineRegistry, cfg) for cfg in ppl_cfg]
+    return pipelines
 
 
 def get_dataset_examples(ds_cfg: _CfgType, ppl_cfg: Optional[_CfgType] = None) -> List[Dict]:
@@ -107,7 +107,10 @@ def get_dataset_examples(ds_cfg: _CfgType, ppl_cfg: Optional[_CfgType] = None) -
             examples = processed
 
             num_after = len(examples)
-            logger.info('Removed {} examples with {}'.format(num_before - num_after, ppl))
+
+            logger.info('Pipeline {} done'.format(ppl))
+            if num_after != num_before:
+                logger.info('Removed {} examples with {}'.format(num_before - num_after, ppl))
 
             if len(examples) == 0:
                 raise ValueError('No examples left!')

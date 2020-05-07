@@ -93,3 +93,5 @@ class Compose(object):
             format_string += '    {0}'.format(ppl)
         format_string += '\n)'
         return format_string
+
+    __str__ = __repr__
