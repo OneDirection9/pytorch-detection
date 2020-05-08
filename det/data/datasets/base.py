@@ -119,12 +119,12 @@ class VisionDataset(object, metaclass=ABCMeta):
     @abstractmethod
     def metadata(self) -> Metadata:
         """Metadata which is useful in evaluation, visualization or logging."""
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def get_examples(self) -> List[Any]:
         """Returns all examples as a list."""
-        raise NotImplementedError
+        pass
 
     def __repr__(self):
         return '{}(metadata={})'.format(self.__class__.__name__, self.metadata)

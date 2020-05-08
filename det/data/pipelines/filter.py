@@ -40,8 +40,6 @@ class FewKeypointsFilter(Pipeline):
             min_keypoints_per_image: The image with visible keypoints less than
                 `min_keypoints_per_image` will be filtered out.
         """
-        super().__init__()
-
         self._min_keypoints_per_image = min_keypoints_per_image
 
     def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:

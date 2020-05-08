@@ -36,7 +36,7 @@ class Pipeline(object, metaclass=ABCMeta):
 
     @abstractmethod
     def __call__(self, example: Any) -> Optional[Any]:
-        raise NotImplementedError
+        pass
 
     def __repr__(self) -> str:
         """Produces something like:
@@ -66,7 +66,7 @@ class Pipeline(object, metaclass=ABCMeta):
 
 
 class Compose(object):
-    """Composes several pipelines together."""
+    """A class that composes several pipelines together."""
 
     def __init__(self, pipelines: List[Pipeline]) -> None:
         """
