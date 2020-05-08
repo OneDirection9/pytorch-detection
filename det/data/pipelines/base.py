@@ -30,7 +30,7 @@ class Pipeline(object, metaclass=ABCMeta):
         class. If loaded images, the memory cost is expensive.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Rewrites it to avoid raise AssertionError in :meth:`__repr__` due to *args, **kwargs."""
         pass
 

@@ -2,7 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 import inspect
 from abc import ABCMeta, abstractmethod
-from typing import Any, List, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 from foundation.registry import Registry
@@ -30,16 +30,26 @@ class TransformGen(object, metaclass=ABCMeta):
     A list of `TransformGen` can be applied with :func:`apply_transform_gens`.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Rewrites it to avoid raise AssertionError in :meth:`__repr__` due to *args, **kwargs."""
         pass
 
     @abstractmethod
-    def get_transform(self, image: np.ndarray, annotations: List[Any]) -> Transform:
+    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+        """Gets a :class:`Transform` based on the given image.
+
+        Args:
+            image: Array of shape HxWxC or HxW.
+            annotations: Annotations of image.
+        """
         pass
 
     @staticmethod
-    def _rand_range(low=1.0, high=None, size=None) -> Union[np.ndarray, float]:
+    def _rand_range(
+        low=1.0,
+        high: Optional[float] = None,
+        size: Optional[int] = None,
+    ) -> Union[np.ndarray, float]:
         """Uniforms float random number between low and high.
 
         See :func:`np.random.uniform`.
