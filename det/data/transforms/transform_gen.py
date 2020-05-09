@@ -1,23 +1,33 @@
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+#
+# Modified by: Zhipeng han
 from __future__ import absolute_import, division, print_function
 
-from typing import Any, Optional, Union
+import sys
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
-from foundation.transforms import HFlipTransform, NoOpTransform, Transform, VFlipTransform
+from foundation.transforms import (
+    HFlipTransform,
+    NoOpTransform,
+    ScaleTransform,
+    Transform,
+    VFlipTransform,
+)
 
 from .base import TransformGen, TransformGenRegistry
 
 
 @TransformGenRegistry.register('RandomApply')
 class RandomApply(TransformGen):
-    """Randomly apply the wrapper transformation with a given probability."""
+    """Applying the wrapper transformation with a given probability randomly."""
 
     def __init__(self, transform: Union[Transform, TransformGen], prob: float = 0.5) -> None:
         """
         Args:
-            transform: The transform to be wrapped by the `RandomApply`. The `transform` can either
-                be a `Transform` or `TransformGen` instance.
-            prob: Probability between 0.0 and 1.0 that the wrapper transformation is applied.
+            transform: The transform to be wrapped by the :class:`RandomApply`. The `transform` can
+                either be a :class:`Transform` or :class:`TransformGen` instance.
+            prob: The probability between 0.0 and 1.0 that the wrapper transformation is applied.
         """
         super(RandomApply, self).__init__()
 
@@ -29,35 +39,39 @@ class RandomApply(TransformGen):
         if not 0.0 <= prob <= 1.0:
             raise ValueError('prob must be between 0.0 and 1.0. Got {}'.format(prob))
 
-        self._transform = transform
-        self._prob = prob
+        self.transform = transform
+        self.prob = prob
 
     def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
-        do = self._rand_range() < self._prob
+        do = self._rand_range() < self.prob
         if do:
-            if isinstance(self._transform, TransformGen):
-                return self._transform.get_transform(image, annotations)
+            if isinstance(self.transform, TransformGen):
+                return self.transform.get_transform(image, annotations)
             else:
-                return self._transform
+                return self.transform
         else:
             return NoOpTransform()
 
 
 @TransformGenRegistry.register('RandomHFlip')
 class RandomHFlip(TransformGen):
-    """Flips the image horizontally with the given probability."""
+    """Flipping the image horizontally with the given probability."""
 
     def __init__(self, prob: float = 0.5) -> None:
+        """
+        Args:
+            prob: Probability between 0.0 and 1.0 that the horizontal flip is applied.
+        """
         super(RandomHFlip, self).__init__()
 
         if not 0.0 <= prob <= 1.0:
             raise ValueError('prob must be between 0.0 and 1.0. Got {}'.format(prob))
 
-        self._prob = prob
+        self.prob = prob
 
     def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
         h, w = image.shape[:2]
-        do = self._rand_range() < self._prob
+        do = self._rand_range() < self.prob
         if do:
             return HFlipTransform(w)
         else:
@@ -66,101 +80,117 @@ class RandomHFlip(TransformGen):
 
 @TransformGenRegistry.register('RandomVFlip')
 class RandomVFlip(TransformGen):
-    """Flips the image vertically with the given probability."""
+    """Flipping the image vertically with the given probability."""
 
     def __init__(self, prob: float = 0.5) -> None:
+        """
+        Args:
+            prob: Probability between 0.0 and 1.0 that the vertical flip is applied.
+        """
         super(RandomVFlip, self).__init__()
 
         if not 0.0 <= prob <= 1.0:
             raise ValueError('prob must be between 0.0 and 1.0. Got {}'.format(prob))
 
-        self._prob = prob
+        self.prob = prob
 
     def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
         h, w = image.shape[:2]
-        do = self._rand_range() < self._prob
+        do = self._rand_range() < self.prob
         if do:
             return VFlipTransform(h)
         else:
             return NoOpTransform()
 
 
-# class Resize(TransformGen):
-#     """ Resize image to a target size"""
-#
-#     def __init__(self, shape, interp=Image.BILINEAR):
-#         """
-#         Args:
-#             shape: (h, w) tuple or a int
-#             interp: PIL interpolation method
-#         """
-#         if isinstance(shape, int):
-#             shape = (shape, shape)
-#         shape = tuple(shape)
-#         self._init(locals())
-#
-#     def get_transform(self, img):
-#         return ResizeTransform(
-#             img.shape[0], img.shape[1], self.shape[0], self.shape[1], self.interp
-#         )
-#
-#
-# class ResizeShortestEdge(TransformGen):
-#     """
-#     Scale the shorter edge to the given size, with a limit of `max_size` on the longer edge.
-#     If `max_size` is reached, then downscale so that the longer edge does not exceed max_size.
-#     """
-#
-#     def __init__(
-#         self, short_edge_length, max_size=sys.maxsize, sample_style="range", interp=Image.BILINEAR
-#     ):
-#         """
-#         Args:
-#             short_edge_length (list[int]): If ``sample_style=="range"``,
-#                 a [min, max] interval from which to sample the shortest edge length.
-#                 If ``sample_style=="choice"``, a list of shortest edge lengths to sample from.
-#             max_size (int): maximum allowed longest edge length.
-#             sample_style (str): either "range" or "choice".
-#         """
-#         super().__init__()
-#         assert sample_style in ["range", "choice"], sample_style
-#
-#         self.is_range = sample_style == "range"
-#         if isinstance(short_edge_length, int):
-#             short_edge_length = (short_edge_length, short_edge_length)
-#         self._init(locals())
-#
-#     def get_transform(self, img):
-#         h, w = img.shape[:2]
-#
-#         if self.is_range:
-#             size = np.random.randint(self.short_edge_length[0], self.short_edge_length[1] + 1)
-#         else:
-#             size = np.random.choice(self.short_edge_length)
-#         if size == 0:
-#             return NoOpTransform()
-#
-#         scale = size * 1.0 / min(h, w)
-#         if h < w:
-#             newh, neww = size, scale * w
-#         else:
-#             newh, neww = scale * h, size
-#         if max(newh, neww) > self.max_size:
-#             scale = self.max_size * 1.0 / max(newh, neww)
-#             newh = newh * scale
-#             neww = neww * scale
-#         neww = int(neww + 0.5)
-#         newh = int(newh + 0.5)
-#         return ResizeTransform(h, w, newh, neww, self.interp)
-#
-#
+@TransformGenRegistry.register('Resize')
+class Resize(TransformGen):
+    """Resizing image to a target size."""
+
+    def __init__(self, shape: Union[Tuple[int, int], int], interp: str = 'bilinear') -> None:
+        """
+        Args:
+            shape: (H, W) tuple or a int.
+            interp: The interpolation method. See :const:`INTERP_CODES` in :module:`foundation`.
+        """
+        super(Resize, self).__init__()
+
+        if isinstance(shape, int):
+            shape = (shape, shape)
+        self.shape = tuple(shape)
+        self.interp = interp
+
+    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+        return ScaleTransform(
+            image.shape[0], image.shape[1], self.shape[0], self.shape[1], self.interp
+        )
+
+
+@TransformGenRegistry.register('ResizeShortestEdge')
+class ResizeShortestEdge(TransformGen):
+    """Scaling the shorter edge to the given size, with a limit of `max_size` on the longer edge.
+
+    If `max_size` is reached, then downscale so that the longer edge does not exceed `max_size`.
+    """
+
+    def __init__(
+        self,
+        short: Union[List[int], int],
+        max_size: int = sys.maxsize,
+        sample_style: str = 'range',
+        interp: str = 'bilinear'
+    ) -> None:
+        """
+        Args:
+            short: If `sample_style=='range'`, a [min, max] interval from which to sample the
+                shortest edge length. If `sample_style=='choice'`, a list of shortest edge lengths
+                to sample from.
+            max_size: Maximum allowed longest edge length.
+            sample_style: Either "range" or "choice".
+            interp: The interpolation method. See :const:`INTERP_CODES` in :module:`foundation`.
+        """
+        super(ResizeShortestEdge, self).__init__()
+
+        if sample_style not in ['range', 'choice']:
+            raise ValueError('sample_type should be range or choice. Got {}'.format(sample_style))
+
+        if isinstance(short, int):
+            short = (short, short)
+
+        self.short = short
+        self.max_size = max_size
+        self.sample_style = sample_style
+        self.interp = interp
+
+    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+        h, w = image.shape[:2]
+
+        if self.sample_style == 'range':
+            size = np.random.randint(self.short[0], self.short[1] + 1)
+        else:
+            size = np.random.choice(self.short)
+
+        scale = size * 1.0 / min(h, w)
+        if h < w:
+            new_h, new_w = size, scale * w
+        else:
+            new_h, new_w = scale * h, size
+        if max(new_h, new_w) > self.max_size:
+            scale = self.max_size * 1.0 / max(new_h, new_w)
+            new_h = new_h * scale
+            new_w = new_w * scale
+        new_w = int(new_w + 0.5)
+        new_h = int(new_h + 0.5)
+        return ScaleTransform(h, w, new_h, new_w, interp=self.interp)
+
+
 # class RandomRotation(TransformGen):
 #     """
 #     This method returns a copy of this image, rotated the given
 #     number of degrees counter clockwise around the given center.
 #     """
 #
-#     def __init__(self, angle, expand=True, center=None, sample_style="range", interp=None):
+#     def __init__(self, angle, expand=True, center=None, sample_style='range', interp=None):
 #         """
 #         Args:
 #             angle (list[float]): If ``sample_style=="range"``,
@@ -176,8 +206,8 @@ class RandomVFlip(TransformGen):
 #                 center has no effect if expand=True because it only affects shifting
 #         """
 #         super().__init__()
-#         assert sample_style in ["range", "choice"], sample_style
-#         self.is_range = sample_style == "range"
+#         assert sample_style in ['range', 'choice'], sample_style
+#         self.is_range = sample_style == 'range'
 #         if isinstance(angle, (float, int)):
 #             angle = (angle, angle)
 #         if center is not None and isinstance(center[0], (float, int)):
@@ -219,13 +249,13 @@ class RandomVFlip(TransformGen):
 #                 height and width
 #         """
 #         super().__init__()
-#         assert crop_type in ["relative_range", "relative", "absolute"]
+#         assert crop_type in ['relative_range', 'relative', 'absolute']
 #         self._init(locals())
 #
 #     def get_transform(self, img):
 #         h, w = img.shape[:2]
 #         croph, cropw = self.get_crop_size((h, w))
-#         assert h >= croph and w >= cropw, "Shape computation in {} has bugs.".format(self)
+#         assert h >= croph and w >= cropw, 'Shape computation in {} has bugs.'.format(self)
 #         h0 = np.random.randint(h - croph + 1)
 #         w0 = np.random.randint(w - cropw + 1)
 #         return CropTransform(w0, h0, cropw, croph)
@@ -239,17 +269,17 @@ class RandomVFlip(TransformGen):
 #             crop_size (tuple): height, width in absolute pixels
 #         """
 #         h, w = image_size
-#         if self.crop_type == "relative":
+#         if self.crop_type == 'relative':
 #             ch, cw = self.crop_size
 #             return int(h * ch + 0.5), int(w * cw + 0.5)
-#         elif self.crop_type == "relative_range":
+#         elif self.crop_type == 'relative_range':
 #             crop_size = np.asarray(self.crop_size, dtype=np.float32)
 #             ch, cw = crop_size + np.random.rand(2) * (1 - crop_size)
 #             return int(h * ch + 0.5), int(w * cw + 0.5)
-#         elif self.crop_type == "absolute":
+#         elif self.crop_type == 'absolute':
 #             return (min(self.crop_size[0], h), min(self.crop_size[1], w))
 #         else:
-#             NotImplementedError("Unknown crop type {}".format(self.crop_type))
+#             NotImplementedError('Unknown crop type {}'.format(self.crop_type))
 #
 #
 # class RandomExtent(TransformGen):
@@ -371,7 +401,7 @@ class RandomVFlip(TransformGen):
 #         self._init(locals())
 #
 #     def get_transform(self, img):
-#         assert img.shape[-1] == 3, "Saturation only works on RGB images"
+#         assert img.shape[-1] == 3, 'Saturation only works on RGB images'
 #         w = np.random.uniform(self.intensity_min, self.intensity_max)
 #         grayscale = img.dot([0.299, 0.587, 0.114])[:, :, np.newaxis]
 #         return BlendTransform(src_image=grayscale, src_weight=1 - w, dst_weight=w)
@@ -398,7 +428,7 @@ class RandomVFlip(TransformGen):
 #         self.eigen_vals = np.array([0.2175, 0.0188, 0.0045])
 #
 #     def get_transform(self, img):
-#         assert img.shape[-1] == 3, "Saturation only works on RGB images"
+#         assert img.shape[-1] == 3, 'Saturation only works on RGB images'
 #         weights = np.random.normal(scale=self.scale, size=3)
 #         return BlendTransform(
 #             src_image=self.eigen_vecs.dot(weights * self.eigen_vals),

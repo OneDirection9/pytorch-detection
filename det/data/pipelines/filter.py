@@ -42,7 +42,7 @@ class FewKeypointsFilter(Pipeline):
         """
         super(FewKeypointsFilter, self).__init__()
 
-        self._min_keypoints_per_image = min_keypoints_per_image
+        self.min_keypoints_per_image = min_keypoints_per_image
 
     def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         annotations: List[Dict[str, Any]] = example['annotations']
@@ -52,7 +52,7 @@ class FewKeypointsFilter(Pipeline):
             for ann in annotations if 'keypoints' in ann
         )  # yapf: disable
 
-        if num_keypoints < self._min_keypoints_per_image:
+        if num_keypoints < self.min_keypoints_per_image:
             return None
         else:
             return example

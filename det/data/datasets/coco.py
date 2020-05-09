@@ -47,12 +47,11 @@ class COCOInstance(VisionDataset):
             metadata: If provided, it should be consistent with the information in json file.
                 Otherwise, information in this json file will be loaded.
         """
-        self._image_root = image_root
-        self._json_file = json_file
+        self.image_root = image_root
+        self.json_file = json_file
+        self.extra_annotation_keys = extra_annotation_keys or []
 
-        self._extra_annotation_keys = extra_annotation_keys or []
         self._metadata = metadata if metadata is not None else Metadata()
-
         # Update dataset metadata
         self._metadata.set(**dict(
             image_root=image_root,
@@ -66,9 +65,9 @@ class COCOInstance(VisionDataset):
     def get_examples(self) -> List[Dict[str, Any]]:
         timer = Timer()
         with contextlib.redirect_stdout(io.StringIO()):  # omit messages printed by COCO
-            coco_api = COCO(self._json_file)
+            coco_api = COCO(self.json_file)
         if timer.seconds() > 1:
-            logger.info('Loading {} takes {:.2f} seconds'.format(self._json_file, timer.seconds()))
+            logger.info('Loading {} takes {:.2f} seconds'.format(self.json_file, timer.seconds()))
 
         # The categories in a custom json file may not be sorted.
         cat_ids = sorted(coco_api.getCatIds())
@@ -98,18 +97,18 @@ class COCOInstance(VisionDataset):
         #  'id': 1268}
         images = coco_api.loadImgs(image_ids)
 
-        logger.info('Loaded {} images in COCO format from {}'.format(len(images), self._json_file))
+        logger.info('Loaded {} images in COCO format from {}'.format(len(images), self.json_file))
 
         dataset_dicts = []
 
-        ann_keys = ['iscrowd', 'bbox', 'category_id'] + self._extra_annotation_keys
+        ann_keys = ['iscrowd', 'bbox', 'category_id'] + self.extra_annotation_keys
 
         num_instances_without_valid_segmentation = 0
 
         for image_dict in images:
             record = {}
 
-            file_name = osp.join(self._image_root, image_dict['file_name'])
+            file_name = osp.join(self.image_root, image_dict['file_name'])
             if not osp.isfile(file_name):
                 raise FileNotFoundError('{}: No such image'.format(file_name))
 

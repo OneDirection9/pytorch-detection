@@ -108,12 +108,12 @@ def get_dataset_examples(ds_cfg: _CfgType, ppl_cfg: Optional[_CfgType] = None) -
 
             num_after = len(examples)
 
-            logger.info('Pipeline {} done'.format(ppl))
+            logger.info('Pipeline - {} done!'.format(ppl))
             if num_after != num_before:
                 logger.info('Removed {} examples with {}'.format(num_before - num_after, ppl))
 
             if len(examples) == 0:
-                raise ValueError('No examples left!')
+                raise ValueError('None examples left!')
 
     has_instances = 'annotations' in examples[0]
     if has_instances:

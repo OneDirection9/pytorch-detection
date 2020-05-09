@@ -40,7 +40,7 @@ class Pipeline(object, metaclass=ABCMeta):
 
     def __repr__(self) -> str:
         """Produces something like:
-        MyPipeline(field1={self._field1}, field2={self._field2})
+        MyPipeline(field1={self.field1}, field2={self.field2})
         """
         try:
             sig = inspect.signature(self.__init__)
@@ -50,13 +50,11 @@ class Pipeline(object, metaclass=ABCMeta):
                     param.kind != param.VAR_POSITIONAL and param.kind != param.VAR_KEYWORD
                 ), "The default __repr__ doesn't support *args or **kwargs"
 
-                attr_name = '_{}'.format(name)
-                assert hasattr(self, attr_name), (
+                assert hasattr(self, name), (
                     'Attribute {} not found! '
-                    'Default __repr__ only works if attributes match the constructor. '
-                    'The matched attribute name for parameter name `a` is `_a`'.format(attr_name)
+                    'Default __repr__ only works if attributes match the constructor.'.format(name)
                 )
-                attr = getattr(self, attr_name)
+                attr = getattr(self, name)
                 items.append('{}={!r}'.format(name, attr))
             return '{}({})'.format(self.__class__.__name__, ', '.join(items))
         except AssertionError:
@@ -77,10 +75,10 @@ class Compose(object):
             if not isinstance(ppl, Pipeline):
                 raise TypeError('Expected Pipeline. Got {}'.format(type(ppl)))
 
-        self._pipelines = pipelines
+        self.pipelines = pipelines
 
     def __call__(self, example: Any) -> Optional[Any]:
-        for ppl in self._pipelines:
+        for ppl in self.pipelines:
             example = ppl(example)
             if example is None:
                 return None
@@ -88,7 +86,7 @@ class Compose(object):
 
     def __repr__(self):
         format_string = self.__class__.__name__ + '('
-        for ppl in self._pipelines:
+        for ppl in self.pipelines:
             format_string += '\n'
             format_string += '    {0}'.format(ppl)
         format_string += '\n)'
