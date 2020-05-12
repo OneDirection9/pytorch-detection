@@ -11,7 +11,7 @@ data:
 #        image_root: ./data/MSCOCO/train2017/
 #        metadata:
 #          name: COCOInstanceMetadata
-    pipeline:
+    pipelines:
       - name: CrowdFilter
       - name: FewKeypointsFilter
         min_keypoints_per_image: 0

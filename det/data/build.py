@@ -8,7 +8,7 @@ from __future__ import absolute_import, division, print_function
 
 import itertools
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from foundation.registry import build
 
@@ -24,7 +24,9 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-_CfgType = List[Dict[str, Any]]
+_SingleCfg = Dict[str, Any]
+_MultiCfg = List[Dict[str, Any]]
+_CfgType = Union[_SingleCfg, _MultiCfg]
 
 
 def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
@@ -38,7 +40,7 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
              'metadata': {'name': 'COCOInstanceMetadata'}}
 
     Returns:
-        List of datasets.
+        List of vision datasets.
     """
     if isinstance(ds_cfg, dict):
         ds_cfg = [ds_cfg]
@@ -56,7 +58,7 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
     return datasets
 
 
-def build_pipelines(ppl_cfg: _CfgType) -> List[Pipeline]:
+def build_pipelines(ppl_cfg: Optional[_CfgType]) -> Optional[List[Pipeline]]:
     """Builds pipelines from config.
 
     Args:
@@ -67,6 +69,9 @@ def build_pipelines(ppl_cfg: _CfgType) -> List[Pipeline]:
     Returns:
         List of pipelines.
     """
+    if ppl_cfg is None:
+        return None
+
     if isinstance(ppl_cfg, dict):
         ppl_cfg = [ppl_cfg]
 
@@ -75,17 +80,19 @@ def build_pipelines(ppl_cfg: _CfgType) -> List[Pipeline]:
     return pipelines
 
 
-def get_dataset_examples(ds_cfg: _CfgType, ppl_cfg: Optional[_CfgType] = None) -> List[Dict]:
+def get_dataset_examples(
+    datasets: List[VisionDataset],
+    pipelines: Optional[List[Pipeline]] = None,
+) -> List[Dict]:
     """Gets dataset examples.
 
     Args:
-        ds_cfg: See :func:`build_vision_datasets`.
-        ppl_cfg: See :func:`build_pipelines`.
+        datasets: List of vision datasets.
+        pipelines: List of pipelines.
 
     Returns:
          List of examples.
     """
-    datasets = build_vision_datasets(ds_cfg)
     examples = [ds.get_examples() for ds in datasets]
     for examples_per_ds, ds in zip(examples, datasets):
         if len(examples_per_ds) == 0:
@@ -93,9 +100,7 @@ def get_dataset_examples(ds_cfg: _CfgType, ppl_cfg: Optional[_CfgType] = None) -
 
     examples = list(itertools.chain.from_iterable(examples))
 
-    if ppl_cfg is not None:
-        pipelines = build_pipelines(ppl_cfg)
-
+    if pipelines is not None:
         for ppl in pipelines:
             num_before = len(examples)
 
@@ -115,6 +120,17 @@ def get_dataset_examples(ds_cfg: _CfgType, ppl_cfg: Optional[_CfgType] = None) -
             if len(examples) == 0:
                 raise ValueError('None examples left!')
 
+    return examples
+
+
+def build_train_dataloader(cfg: Dict[str, Any]):
+    _cfg = cfg['data']['train']
+
+    datasets = build_vision_datasets(_cfg['datasets'])
+    pipelines = build_pipelines(_cfg.get('pipelines', None))
+    examples = get_dataset_examples(datasets, pipelines)
+
+    # Check metadata across multiple datasets
     has_instances = 'annotations' in examples[0]
     if has_instances:
         try:
