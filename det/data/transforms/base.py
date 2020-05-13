@@ -36,6 +36,11 @@ class TransformGen(object, metaclass=ABCMeta):
     When this assumption is not true, you need to create the transforms by your own.
 
     A list of `TransformGen` can be applied with :func:`apply_transform_gens`.
+
+    Notes:
+        Most of time the image itself is enough to instantiate a transform, but sometimes not, e.g.
+        :class:`RandomCrop`. With annotations as argument can keep the api consistent across all
+        :class:`TransformGen`.
     """
 
     def __init__(self) -> None:

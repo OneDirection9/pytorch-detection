@@ -230,7 +230,7 @@ def Resize_rotated_box(transform: ResizeTransform, rotated_boxes: np.ndarray) ->
     :meth:`RotatedBoxes.scale`.
 
     Args:
-        transform: :class:`ScaleTransform` instance.
+        transform: :class:`ResizeTransform` instance.
         rotated_boxes: Floating point array of shape Nx5 of
             (x_center, y_center, width, height, angle_degrees) format in absolute coordinates.
     """

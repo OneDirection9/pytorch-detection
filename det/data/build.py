@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from foundation.registry import build
 
+from .common import DatasetFromList, MapDataset
 from .datasets import MetadataStash, VisionDataset, VisionDatasetStash
 from .pipelines import Pipeline, PipelineRegistry
 from .transforms import TransformGen, TransformGenRegistry, TransformRegistry
@@ -106,8 +107,8 @@ def build_transform_gens(tfm_cfg: _CfgType) -> List[TransformGen]:
             if TransformRegistry.contains(name) and TransformGenRegistry.contains(name):
                 raise ValueError(
                     'Both TransformRegistry and TransformGenRegistry contain {}. '
-                    'We cannot inference which one do you want to use. You can rename'
-                    'the name of one of them'.format(name)
+                    'We cannot inference which one do you want to use. You can rename one of them'
+                    .format(name)
                 )
 
             if TransformRegistry.contains(name):
@@ -187,6 +188,9 @@ def build_train_dataloader(cfg: Dict[str, Any]):
         except AttributeError:  # class names are not available for this dataset
             pass
 
+    dataset = DatasetFromList(examples, copy=True, serialization=True)
+    dataset = MapDataset(dataset, map_func=lambda x: x)
+
     tfm_gens = build_transform_gens(_cfg['transform_gens'])
 
-    return tfm_gens
+    return dataset, tfm_gens
