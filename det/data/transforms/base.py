@@ -35,12 +35,25 @@ class TransformGen(object, metaclass=ABCMeta):
     is that the image itself and annotations are sufficient to instantiate a transform.
     When this assumption is not true, you need to create the transforms by your own.
 
-    A list of `TransformGen` can be applied with :func:`apply_transform_gens`.
+    Most of time the image itself is enough to instantiate a transform, but sometimes not, e.g.
+    :class:`RandomCrop`. With annotations as argument can keep the api consistent across all
+    :class:`TransformGen`.
 
     Notes:
-        Most of time the image itself is enough to instantiate a transform, but sometimes not, e.g.
-        :class:`RandomCrop`. With annotations as argument can keep the api consistent across all
-        :class:`TransformGen`.
+        To apply a list of :class:`TransformGen` on the input image and annotations, we cannot
+        simply create all transforms without applying it to the image and annotations, because a
+        subsequent transform may need the output of the previous one.
+
+        .. code-block:: python
+            for g in transform_gens:
+                tfm = g.get_transform(image, annotations)
+                image = tfm.apply_image(image)
+
+                # apply to annotations
+                if annotations is not None:
+                    for ann in annotations:
+                        ann['bbox'] = tfm.apply_box(ann['bbox'])
+                        ...
     """
 
     def __init__(self) -> None:
