@@ -122,8 +122,8 @@ class VisionDataset(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_examples(self) -> List[Any]:
-        """Returns all examples as a list."""
+    def get_examples(self) -> List[Dict[str, Any]]:
+        """Returns a list of dictionaries with paths and annotations."""
         pass
 
     def __repr__(self):

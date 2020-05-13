@@ -230,12 +230,14 @@ class RandomCrop(TransformGen):
                 'crop_size should be between 0.0 and 1.0 when crop_type is in relative mode'
             )
 
+        self.crop_type = crop_type
+        self.crop_size = crop_size
+
     def get_transform(
         self, image: np.ndarray, annotations: Optional[List[Dict[str, Any]]] = None
     ) -> Transform:
-        """
-        If annotations is not None, a CropTransform that the cropping region contains the center of
-        a randomly selected instance.
+        """If annotations is not None, a CropTransform that the cropping region contains the center
+        of a randomly selected instance. Otherwise, a region is randomly cropped out.
         """
         h, w = image.shape[:2]
         crop_h, crop_w = self.get_crop_size((h, w))
@@ -284,6 +286,7 @@ class RandomCrop(TransformGen):
             raise NotImplementedError('Unknown crop type {}'.format(self.crop_type))
 
 
+@TransformGenRegistry.register('RandomContrast')
 class RandomContrast(TransformGen):
     """Transforming image contrast randomly.
 
@@ -311,6 +314,7 @@ class RandomContrast(TransformGen):
         return BlendTransform(src_image=image.mean(), src_weight=1 - w, dst_weight=w)
 
 
+@TransformGenRegistry.register('RandomBrightness')
 class RandomBrightness(TransformGen):
     """Transforming image brightness randomly.
 
@@ -338,6 +342,7 @@ class RandomBrightness(TransformGen):
         return BlendTransform(src_image=0, src_weight=1 - w, dst_weight=w)
 
 
+@TransformGenRegistry.register('RandomSaturation')
 class RandomSaturation(TransformGen):
     """Transforming image saturation randomly.
 
@@ -368,6 +373,7 @@ class RandomSaturation(TransformGen):
         return BlendTransform(src_image=grayscale, src_weight=1 - w, dst_weight=w)
 
 
+@TransformGenRegistry.register('RandomLighting')
 class RandomLighting(TransformGen):
     """Transforming image color using fixed PCA over ImageNet randomly.
 
@@ -429,7 +435,7 @@ class RandomRotation(TransformGen):
 
         if sample_style not in ['range', 'choice']:
             raise ValueError('sample_type should be range or choice. Got {}'.format(sample_style))
-        if np.max(center) > 1.0 or np.min(center) < 0.0:
+        if center is not None and (np.max(center) > 1.0 or np.min(center) < 0.0):
             raise ValueError('center should have value in range [0.0, 1.0].')
 
         if isinstance(angle, (float, int)):
@@ -464,6 +470,7 @@ class RandomRotation(TransformGen):
         return RotationTransform(h, w, angle, expand=self.expand, center=center, interp=self.interp)
 
 
+@TransformGenRegistry.register('RandomExtent')
 class RandomExtent(TransformGen):
     """Cropping a random 'subrect' of the source image.
 

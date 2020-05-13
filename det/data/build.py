@@ -14,6 +14,7 @@ from foundation.registry import build
 
 from .datasets import MetadataStash, VisionDataset, VisionDatasetStash
 from .pipelines import Pipeline, PipelineRegistry
+from .transforms import TransformGen, TransformGenRegistry, TransformRegistry
 from .utils import check_metadata_consistency
 
 __all__ = [
@@ -33,7 +34,8 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
     """Builds vision datasets from config.
 
     Args:
-        ds_cfg: Dataset config that should be list of dicts, each looks something like:
+        ds_cfg: Dataset config that should be a dictionary or a list of dictionaries, each looks
+            something like:
             {'name': 'COCOInstance',
              'json_file': './data/MSCOCO/annotations/instances_train2014.json',
              'image_root': './data/MSCOCO/train2014/',
@@ -62,7 +64,8 @@ def build_pipelines(ppl_cfg: Optional[_CfgType]) -> Optional[List[Pipeline]]:
     """Builds pipelines from config.
 
     Args:
-        ppl_cfg: Pipeline config that should be list of dicts, each looks something like:
+        ppl_cfg: Pipeline config that should be a dictionary or a list of dictionaries, each looks
+            something like:
             {'name': 'FewKeypointsFilter',
              'min_keypoints_per_image': 1}
 
@@ -80,10 +83,51 @@ def build_pipelines(ppl_cfg: Optional[_CfgType]) -> Optional[List[Pipeline]]:
     return pipelines
 
 
+def build_transform_gens(tfm_cfg: _CfgType) -> List[TransformGen]:
+    """Builds transform generators from config.
+
+    Args:
+        tfm_cfg: Transform generator config that should be a dictionary or a list of dictionaries,
+            each looks something like:
+            {'name': 'RandomHFlip',
+             'prob': 0.5}
+
+    Returns:
+        List of transform generators.
+    """
+    if isinstance(tfm_cfg, dict):
+        tfm_cfg = [tfm_cfg]
+
+    tfm_gens = []
+    for cfg in tfm_cfg:
+        if cfg['name'] == 'RandomApply':
+            # In RandomApply, we may pass a TransformGen or a Transform, so we need to discuss it.
+            name = cfg['transform']['name']
+            if TransformRegistry.contains(name) and TransformGenRegistry.contains(name):
+                raise ValueError(
+                    'Both TransformRegistry and TransformGenRegistry contain {}. '
+                    'We cannot inference which one do you want to use. You can rename'
+                    'the name of one of them'.format(name)
+                )
+
+            if TransformRegistry.contains(name):
+                cfg['transform'] = build(TransformRegistry, cfg['transform'])
+            elif TransformGenRegistry.contains(name):
+                cfg['transform'] = build(TransformGenRegistry, cfg['transform'])
+            else:
+                raise KeyError(
+                    '{} is not registered in TransformGenRegistry or TransformRegistry'
+                    .format(name)
+                )
+        tfm_gens.append(build(TransformGenRegistry, cfg))
+
+    return tfm_gens
+
+
 def get_dataset_examples(
     datasets: List[VisionDataset],
     pipelines: Optional[List[Pipeline]] = None,
-) -> List[Dict]:
+) -> List[Dict[str, Any]]:
     """Gets dataset examples.
 
     Args:
@@ -124,6 +168,11 @@ def get_dataset_examples(
 
 
 def build_train_dataloader(cfg: Dict[str, Any]):
+    """Builds train dataloader from all config.
+
+    Args:
+        cfg: Config that loaded from .yaml file.
+    """
     _cfg = cfg['data']['train']
 
     datasets = build_vision_datasets(_cfg['datasets'])
@@ -138,4 +187,6 @@ def build_train_dataloader(cfg: Dict[str, Any]):
         except AttributeError:  # class names are not available for this dataset
             pass
 
-    return examples
+    tfm_gens = build_transform_gens(_cfg['transform_gens'])
+
+    return tfm_gens

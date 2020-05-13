@@ -2,7 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 import inspect
 from abc import ABCMeta, abstractmethod
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from foundation.registry import Registry
 
@@ -35,7 +35,7 @@ class Pipeline(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def __call__(self, example: Any) -> Optional[Any]:
+    def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         pass
 
     def __repr__(self) -> str:
@@ -77,7 +77,7 @@ class Compose(object):
 
         self.pipelines = pipelines
 
-    def __call__(self, example: Any) -> Optional[Any]:
+    def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         for ppl in self.pipelines:
             example = ppl(example)
             if example is None:
