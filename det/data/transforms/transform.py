@@ -1,12 +1,13 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 #
-# Modified by: Zhipeng han
+# Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
 from typing import Optional, Tuple
 
 import cv2
 import numpy as np
+from foundation.registry import Registry
 from foundation.transforms import (
     CV2_INTER_CODES,
     HFlipTransform,
@@ -20,7 +21,11 @@ from foundation.transforms import (
 )
 from PIL import Image
 
-__all__ = ['ExtentTransform', 'RotationTransform']
+__all__ = [
+    'TransformRegistry',
+    'ExtentTransform',
+    'RotationTransform',
+]
 
 PIL_INTER_CODES = {
     'nearest': Image.NEAREST,
@@ -30,6 +35,15 @@ PIL_INTER_CODES = {
 }
 
 
+class TransformRegistry(Registry):
+    """Registry of transforms."""
+    pass
+
+
+# TODO: register more Transform if needed
+
+
+@TransformRegistry.register('ExtentTransform')
 class ExtentTransform(Transform):
     """Extracting a sub-region from the source image and scales it to the output size.
 
@@ -102,6 +116,7 @@ class ExtentTransform(Transform):
         return self.apply_image(segmentation, interp='nearest')
 
 
+@TransformRegistry.register('RotationTransform')
 class RotationTransform(Transform):
     """Rotating the image with given number of degrees counter clockwise around its center."""
 

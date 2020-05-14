@@ -13,14 +13,14 @@ from foundation.utils import Timer
 from pycocotools.coco import COCO
 
 from ...structures import BoxMode
-from .base import Metadata, VisionDataset, VisionDatasetStash
+from .base import Metadata, VisionDataset, VisionDatasetRegistry
 
 __all__ = ['COCOInstance']
 
 logger = logging.getLogger(__name__)
 
 
-@VisionDatasetStash.register('COCOInstance')
+@VisionDatasetRegistry.register('COCOInstance')
 class COCOInstance(VisionDataset):
     """COCO instance dataset supporting object detection task and keypoint detection task.
 

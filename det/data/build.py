@@ -1,8 +1,13 @@
 """
 The workflow of data is:
 
-1. Get examples from one or more :class:`VisionDataset`.
-2. Passes each example through zero or more :class:`Pipeline`.
+1. Build raw dataset:
+    1.1. Get examples from one or more :class:`VisionDataset`. Build :class:`Metadata` if needed.
+    1.2. Pass each example through zero or more :class:`Pipeline` to get a new list of examples.
+    1.3. Pass new examples to :class:`DatasetFromList` to get a dataset.
+2. Build final dataset:
+    2.1. Build :class:`BaseMapper` and build :class:`TransformGen` if needed.
+    2.2. Pass mapper to :class:`MapDataset` to get final dataset.
 """
 from __future__ import absolute_import, division, print_function
 
@@ -13,7 +18,8 @@ from typing import Any, Dict, List, Optional, Union
 from foundation.registry import build
 
 from .common import DatasetFromList, MapDataset
-from .datasets import MetadataStash, VisionDataset, VisionDatasetStash
+from .dataset_mapper import DatasetMapper, DatasetMapperRegistry
+from .datasets import MetadataRegistry, VisionDataset, VisionDatasetRegistry
 from .pipelines import Pipeline, PipelineRegistry
 from .transforms import TransformGen, TransformGenRegistry, TransformRegistry
 from .utils import check_metadata_consistency
@@ -54,14 +60,14 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
     # Build metadata
     for cfg in ds_cfg:
         if 'metadata' in cfg:
-            cfg['metadata'] = build(MetadataStash, cfg['metadata'])
+            cfg['metadata'] = build(MetadataRegistry, cfg['metadata'])
 
     # Build datasets
-    datasets = [build(VisionDatasetStash, cfg) for cfg in ds_cfg]
+    datasets = [build(VisionDatasetRegistry, cfg) for cfg in ds_cfg]
     return datasets
 
 
-def build_pipelines(ppl_cfg: Optional[_CfgType]) -> Optional[List[Pipeline]]:
+def build_pipelines(ppl_cfg: _CfgType) -> List[Pipeline]:
     """Builds pipelines from config.
 
     Args:
@@ -73,9 +79,6 @@ def build_pipelines(ppl_cfg: Optional[_CfgType]) -> Optional[List[Pipeline]]:
     Returns:
         List of pipelines.
     """
-    if ppl_cfg is None:
-        return None
-
     if isinstance(ppl_cfg, dict):
         ppl_cfg = [ppl_cfg]
 
@@ -123,6 +126,22 @@ def build_transform_gens(tfm_cfg: _CfgType) -> List[TransformGen]:
         tfm_gens.append(build(TransformGenRegistry, cfg))
 
     return tfm_gens
+
+
+def build_dataset_mapper(mapper_cfg: _SingleCfg) -> DatasetMapper:
+    """Builds dataset mapper from config.
+
+    Args:
+        mapper_cfg: Mapper config and we can have one and only one mapper. And transform_gen will
+            also be build, if provided.
+
+    Returns:
+        A mapper.
+    """
+    if 'transform_gens' in mapper_cfg:
+        mapper_cfg['transform_gens'] = build_transform_gens(mapper_cfg['transform_gens'])
+    mapper = build(DatasetMapperRegistry, mapper_cfg)
+    return mapper
 
 
 def get_dataset_examples(
@@ -177,7 +196,10 @@ def build_train_dataloader(cfg: Dict[str, Any]):
     _cfg = cfg['data']['train']
 
     datasets = build_vision_datasets(_cfg['datasets'])
-    pipelines = build_pipelines(_cfg.get('pipelines', None))
+    if 'pipelines' in _cfg:
+        pipelines = build_pipelines(_cfg['pipelines'])
+    else:
+        pipelines = None
     examples = get_dataset_examples(datasets, pipelines)
 
     # Check metadata across multiple datasets
@@ -189,8 +211,9 @@ def build_train_dataloader(cfg: Dict[str, Any]):
             pass
 
     dataset = DatasetFromList(examples, copy=True, serialization=True)
-    dataset = MapDataset(dataset, map_func=lambda x: x)
 
-    tfm_gens = build_transform_gens(_cfg['transform_gens'])
+    if 'mapper' in _cfg:
+        mapper = build_dataset_mapper(_cfg['mapper'])
+        dataset = MapDataset(dataset, mapper)
 
-    return dataset, tfm_gens
+    return dataset
