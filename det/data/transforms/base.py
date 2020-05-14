@@ -11,7 +11,12 @@ import numpy as np
 from foundation.registry import Registry
 from foundation.transforms import Transform, TransformList
 
-__all__ = ['TransformRegistry', 'TransformGenRegistry', 'TransformGen', 'apply_transform_gens']
+__all__ = [
+    'TransformRegistry',
+    'TransformGenRegistry',
+    'TransformGen',
+    'apply_transform_gens',
+]
 
 
 class TransformRegistry(Registry):
