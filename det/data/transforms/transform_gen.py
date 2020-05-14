@@ -4,7 +4,7 @@
 from __future__ import absolute_import, division, print_function
 
 import sys
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from foundation.transforms import (
@@ -17,7 +17,6 @@ from foundation.transforms import (
     VFlipTransform,
 )
 
-from ...structures import BoxMode
 from .base import TransformGen, TransformGenRegistry
 from .transform import ExtentTransform, RotationTransform
 
@@ -61,11 +60,11 @@ class RandomApply(TransformGen):
         self.transform = transform
         self.prob = prob
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         do = self._rand_range() < self.prob
         if do:
             if isinstance(self.transform, TransformGen):
-                return self.transform.get_transform(image, annotations)
+                return self.transform.get_transform(image)
             else:
                 return self.transform
         else:
@@ -88,7 +87,7 @@ class RandomHFlip(TransformGen):
 
         self.prob = prob
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         h, w = image.shape[:2]
         do = self._rand_range() < self.prob
         if do:
@@ -113,7 +112,7 @@ class RandomVFlip(TransformGen):
 
         self.prob = prob
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         h, w = image.shape[:2]
         do = self._rand_range() < self.prob
         if do:
@@ -139,7 +138,7 @@ class Resize(TransformGen):
         self.shape = tuple(shape)
         self.interp = interp
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         return ResizeTransform(
             image.shape[0], image.shape[1], self.shape[0], self.shape[1], self.interp
         )
@@ -181,7 +180,7 @@ class ResizeShortestEdge(TransformGen):
         self.sample_style = sample_style
         self.interp = interp
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         h, w = image.shape[:2]
 
         if self.sample_style == 'range':
@@ -233,35 +232,15 @@ class RandomCrop(TransformGen):
         self.crop_type = crop_type
         self.crop_size = crop_size
 
-    def get_transform(
-        self, image: np.ndarray, annotations: Optional[List[Dict[str, Any]]] = None
-    ) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         """If annotations is not None, a CropTransform that the cropping region contains the center
         of a randomly selected instance. Otherwise, a region is randomly cropped out.
         """
         h, w = image.shape[:2]
         crop_h, crop_w = self.get_crop_size((h, w))
         assert h >= crop_h and w >= crop_w, 'Shape computation in {} has bugs.'.format(self)
-
-        crop_size = np.asarray((crop_h, crop_w), dtype=np.int32)
-
-        if annotations is None:
-            y1 = np.random.randint(h - crop_h + 1)
-            x1 = np.random.randint(w - crop_w + 1)
-        else:
-            ann = np.random.choice(annotations)
-            bbox = BoxMode.convert(ann['bbox'], ann['bbox_mode'], BoxMode.XYXY_ABS)
-            ctr_yx = (bbox[1] + bbox[3]) * 0.5, (bbox[0] + bbox[2]) * 0.5
-            assert (
-                h >= ctr_yx[0] and w >= ctr_yx[1]
-            ), 'The annotation bounding box is outside of the image!'
-
-            min_yx = np.maximum(np.floor(ctr_yx).astype(np.int32) - crop_size, 0)
-            max_yx = np.maximum(np.asarray((h, w), dtype=np.int32) - crop_size, 0)
-            max_yx = np.minimum(max_yx, np.ceil(ctr_yx).astype(np.int32))
-
-            y1 = np.random.randint(min_yx[0], max_yx[0] + 1)
-            x1 = np.random.randint(min_yx[1], max_yx[1] + 1)
+        y1 = np.random.randint(h - crop_h + 1)
+        x1 = np.random.randint(w - crop_w + 1)
         return CropTransform(x1, y1, crop_h, crop_w)
 
     def get_crop_size(self, image_size: Tuple[int, int]) -> Tuple[int, int]:
@@ -309,7 +288,7 @@ class RandomContrast(TransformGen):
         self.intensity_min = intensity_min
         self.intensity_max = intensity_max
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         w = np.random.uniform(self.intensity_min, self.intensity_max)
         return BlendTransform(src_image=image.mean(), src_weight=1 - w, dst_weight=w)
 
@@ -337,7 +316,7 @@ class RandomBrightness(TransformGen):
         self.intensity_min = intensity_min
         self.intensity_max = intensity_max
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         w = np.random.uniform(self.intensity_min, self.intensity_max)
         return BlendTransform(src_image=0, src_weight=1 - w, dst_weight=w)
 
@@ -365,7 +344,7 @@ class RandomSaturation(TransformGen):
         self.intensity_min = intensity_min
         self.intensity_max = intensity_max
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         if image.ndim != 3 or image.shape[-1] != 3:
             raise ValueError('Saturation only works on RGB images')
         w = np.random.uniform(self.intensity_min, self.intensity_max)
@@ -394,7 +373,7 @@ class RandomLighting(TransformGen):
         )
         self.eigen_vals = np.array([0.2175, 0.0188, 0.0045])
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         if image.ndim != 3 or image.shape[-1] != 3:
             raise ValueError('Saturation only works on RGB images')
         weights = np.random.normal(scale=self.scale, size=3)
@@ -449,7 +428,7 @@ class RandomRotation(TransformGen):
         self.sample_style = sample_style
         self.interp = interp
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         h, w = image.shape[:2]
         center = None
         if self.sample_style == 'range':
@@ -493,7 +472,7 @@ class RandomExtent(TransformGen):
         self.scale_range = scale_range
         self.shift_range = shift_range
 
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         h, w = image.shape[:2]
 
         # Initialize src_rect to fit the input image.

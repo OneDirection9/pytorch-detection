@@ -5,13 +5,13 @@ from __future__ import absolute_import, division, print_function
 
 import inspect
 from abc import ABCMeta, abstractmethod
-from typing import Any, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from foundation.registry import Registry
-from foundation.transforms import Transform
+from foundation.transforms import Transform, TransformList
 
-__all__ = ['TransformRegistry', 'TransformGenRegistry', 'TransformGen']
+__all__ = ['TransformRegistry', 'TransformGenRegistry', 'TransformGen', 'apply_transform_gens']
 
 
 class TransformRegistry(Registry):
@@ -25,35 +25,17 @@ class TransformGenRegistry(Registry):
 
 
 class TransformGen(object, metaclass=ABCMeta):
-    """A wrapper that creates a :class:`Transform` based on the given image and annotations.
+    """A wrapper that creates a :class:`Transform` based on the given image.
 
-    It creates a :class:`Transform` based on the given image and optionally the annotations,
-    sometimes with randomness. The transform can then be used to transform images or other data
+    It creates a :class:`Transform` based on the given image, sometimes with randomness.
+    The transform can then be used to transform images or other data
     (boxes, points, annotations, etc.) associated with it.
 
     The assumption made in this class
-    is that the image itself and annotations are sufficient to instantiate a transform.
+    is that the image itself is sufficient to instantiate a transform.
     When this assumption is not true, you need to create the transforms by your own.
 
-    Most of time the image itself is enough to instantiate a transform, but sometimes not, e.g.
-    :class:`RandomCrop`. With annotations as argument can keep the api consistent across all
-    :class:`TransformGen`.
-
-    Notes:
-        To apply a list of :class:`TransformGen` on the input image and annotations, we cannot
-        simply create all transforms without applying it to the image and annotations, because a
-        subsequent transform may need the output of the previous one.
-
-        .. code-block:: python
-            for g in transform_gens:
-                tfm = g.get_transform(image, annotations)
-                image = tfm.apply_image(image)
-
-                # apply to annotations
-                if annotations is not None:
-                    for ann in annotations:
-                        ann['bbox'] = tfm.apply_box(ann['bbox'])
-                        ...
+    A list of `TransformGen` can be applied with :func:`apply_transform_gens`.
     """
 
     def __init__(self) -> None:
@@ -61,12 +43,11 @@ class TransformGen(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_transform(self, image: np.ndarray, annotations: Optional[Any] = None) -> Transform:
+    def get_transform(self, image: np.ndarray) -> Transform:
         """Gets a :class:`Transform` based on the given image.
 
         Args:
             image: Array of shape HxWxC or HxW.
-            annotations: Annotations of image.
         """
         pass
 
@@ -109,3 +90,38 @@ class TransformGen(object, metaclass=ABCMeta):
             return super().__repr__()
 
     __str__ = __repr__
+
+
+def apply_transform_gens(
+    transform_gens: List[TransformGen],
+    image: np.ndarray,
+) -> Tuple[np.ndarray, TransformList]:
+    """Applies a list of :class:`TransformGen` on the input image, and
+    returns the transformed image and a list of transforms.
+
+    We cannot simply create and return all transforms without applying it to the image, because
+    a subsequent transform may need the output of the previous one.
+
+    Args:
+        transform_gens: List of :class:`TransformGen` instance to be applied.
+        image: Array of shape HxW or HxWx3.
+
+    Returns:
+        ndarray: The transformed image.
+        TransformList: Contain the transforms that's used to other data.
+    """
+    for g in transform_gens:
+        assert isinstance(g, TransformGen), g
+
+    tfms = []
+    for g in transform_gens:
+        tfm = g.get_transform(image)
+        if not isinstance(tfm, Transform):
+            raise TypeError(
+                'TransformGen {} must return an instance of Transform! Got {} instead'.format(
+                    g, tfm
+                )
+            )
+        image = tfm.apply_image(image)
+        tfms.append(tfm)
+    return image, TransformList(tfms)
