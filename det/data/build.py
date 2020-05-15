@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from foundation.registry import build
+from foundation.transforms import Transform
 
 from .common import DatasetFromList, MapDataset
 from .dataset_mapper import DatasetMapper, DatasetMapperRegistry
@@ -102,28 +103,30 @@ def build_transform_gens(tfm_cfg: _CfgType) -> List[TransformGen]:
     if isinstance(tfm_cfg, dict):
         tfm_cfg = [tfm_cfg]
 
+    def _build(_cfg: _SingleCfg) -> Union[Transform, TransformGen]:
+        # We may pass a TransformGen or a Transform, so we need to discuss it.
+        name = _cfg['name']
+        if TransformRegistry.contains(name) and TransformGenRegistry.contains(name):
+            raise ValueError(
+                'Both TransformRegistry and TransformGenRegistry contain {}. '
+                'We cannot inference which one do you want to use. You can rename one of them'
+                .format(name)
+            )
+
+        if TransformRegistry.contains(name):
+            return build(TransformRegistry, _cfg)
+        elif TransformGenRegistry.contains(name):
+            return build(TransformGenRegistry, _cfg)
+        else:
+            raise KeyError(
+                '{} is not registered in TransformGenRegistry or TransformRegistry'.format(name)
+            )
+
     tfm_gens = []
     for cfg in tfm_cfg:
         if cfg['name'] == 'RandomApply':
-            # In RandomApply, we may pass a TransformGen or a Transform, so we need to discuss it.
-            name = cfg['transform']['name']
-            if TransformRegistry.contains(name) and TransformGenRegistry.contains(name):
-                raise ValueError(
-                    'Both TransformRegistry and TransformGenRegistry contain {}. '
-                    'We cannot inference which one do you want to use. You can rename one of them'
-                    .format(name)
-                )
-
-            if TransformRegistry.contains(name):
-                cfg['transform'] = build(TransformRegistry, cfg['transform'])
-            elif TransformGenRegistry.contains(name):
-                cfg['transform'] = build(TransformGenRegistry, cfg['transform'])
-            else:
-                raise KeyError(
-                    '{} is not registered in TransformGenRegistry or TransformRegistry'
-                    .format(name)
-                )
-        tfm_gens.append(build(TransformGenRegistry, cfg))
+            cfg['transform'] = _build(cfg['transform'])
+        tfm_gens.append(_build(cfg))
 
     return tfm_gens
 
@@ -177,7 +180,7 @@ def get_dataset_examples(
 
             num_after = len(examples)
 
-            logger.info('Pipeline - {} done!'.format(ppl))
+            logger.info("Pipeline - '{}' done!".format(ppl))
             if num_after != num_before:
                 logger.info('Removed {} examples with {}'.format(num_before - num_after, ppl))
 
@@ -212,8 +215,8 @@ def build_train_dataloader(cfg: Dict[str, Any]):
 
     dataset = DatasetFromList(examples, copy=True, serialization=True)
 
-    if 'mapper' in _cfg:
-        mapper = build_dataset_mapper(_cfg['mapper'])
-        dataset = MapDataset(dataset, mapper)
+    if 'dataset_mapper' in _cfg:
+        dataset_mapper = build_dataset_mapper(_cfg['dataset_mapper'])
+        dataset = MapDataset(dataset, dataset_mapper)
 
     return dataset

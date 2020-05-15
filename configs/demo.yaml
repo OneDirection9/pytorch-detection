@@ -15,12 +15,16 @@ data:
       - name: CrowdFilter
       - name: FewKeypointsFilter
         min_keypoints_per_image: 0
-    mapper:
+      - name: FormatConverter
+    dataset_mapper:
       name: DictMapper
       transform_gens:
         - name: RandomApply
           transform:
             name: RandomHFlip
+        - name: ExtentTransform
+          src_rect: [0, 0, 0, 0]
+          output_size: [100, 100]
         - name: RandomHFlip
         - name: RandomVFlip
         - name: Resize
@@ -32,22 +36,6 @@ data:
         - name: RandomCrop
           crop_type: absolute
           crop_size: [600, 600]
-        - name: RandomContrast
-          intensity_min: 0.5
-          intensity_max: 1.2
-        - name: RandomBrightness
-          intensity_min: 0.5
-          intensity_max: 1.2
-        - name: RandomSaturation
-          intensity_min: 0.5
-          intensity_max: 1.2
-        - name: RandomLighting
-          scale: 0.5
-        - name: RandomRotation
-          angle: 200
-        - name: RandomExtent
-          scale_range: [0.5, 1.2]
-          shift_range: [0.1, 0.2]
 
 dataloader:
   images_per_gpu: 2

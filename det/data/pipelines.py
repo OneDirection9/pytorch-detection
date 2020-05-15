@@ -8,6 +8,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import pycocotools.mask as mask_util
 from foundation.registry import Registry
 
 from ..structures import BoxMode
@@ -159,14 +160,34 @@ class FewKeypointsFilter(Pipeline):
 
 @PipelineRegistry.register('FormatConverter')
 class FormatConverter(Pipeline):
-    """A class that converts format acceptable by :class:`Transform`."""
+    """A class that converts format acceptable by :class:`Transform` inplace."""
 
     def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        h, w = example['height'], example['width']
         annotations: List[Dict[str, Any]] = example['annotations']
         for ann in annotations:
             bbox = np.asarray(ann['bbox']).reshape(-1, 4)
             bbox = BoxMode.convert(bbox, ann['bbox_mode'], BoxMode.XYXY_ABS)
             ann['bbox'] = bbox
             ann['bbox_mode'] = BoxMode.XYXY_ABS
+
+            if 'segmentation' in ann:
+                segm = ann['segmentation']
+                if isinstance(segm, list):
+                    # polygons
+                    ann['segmentation'] = [np.asarray(p).reshape(-1, 2) for p in segm]
+                elif isinstance(segm, dict):
+                    # RLE
+                    mask = mask_util.decode(segm)
+                    assert tuple(mask.shape[:2]) == (h, w), 'Size mismatch segmentation v.s. image'
+                    ann['segmentation'] = mask
+                else:
+                    raise TypeError(
+                        'Expected segmentation in polygons as List[List[float] or np.ndarray] or '
+                        'COCO-style RLE as a dict. Got {}'.format(type(segm))
+                    )
+
+            if 'keypoints' in ann:
+                ann['keypoints'] = np.asarray(ann['keypoints'], dtype='float64').reshape(-1, 3)
 
         return example

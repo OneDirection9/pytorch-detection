@@ -40,8 +40,13 @@ class DatasetMapper(object, metaclass=ABCMeta):
 @DatasetMapperRegistry.register('DictMapper')
 class DictMapper(DatasetMapper):
 
-    def __init__(self, transform_gens):
+    def __init__(self, image_format, mask_on, mask_format, keypoint_on, transform_gens):
         super(DictMapper, self).__init__(transform_gens)
+
+        self.image_format = image_format
+        self.mask_on = mask_on
+        self.mask_format = mask_format
+        self.keypoint_on = keypoint_on
 
     def __call__(self, example: Dict[str, Any]) -> Optional[Any]:
         pass
