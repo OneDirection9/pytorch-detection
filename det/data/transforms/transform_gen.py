@@ -17,7 +17,6 @@ from foundation.transforms import (
     NoOpTransform,
     ResizeTransform,
     Transform,
-    TransformList,
     VFlipTransform,
 )
 
@@ -26,7 +25,6 @@ from .transform import ExtentTransform, RotationTransform
 __all__ = [
     'TransformGenRegistry',
     'TransformGen',
-    'apply_transform_gens',
     'RandomApply',
     'RandomHFlip',
     'RandomVFlip',
@@ -113,41 +111,6 @@ class TransformGen(object, metaclass=ABCMeta):
             return super().__repr__()
 
     __str__ = __repr__
-
-
-def apply_transform_gens(
-    transform_gens: List[TransformGen],
-    image: np.ndarray,
-) -> Tuple[np.ndarray, TransformList]:
-    """Applies a list of :class:`TransformGen` on the input image, and
-    returns the transformed image and a list of transforms.
-
-    We cannot simply create and return all transforms without applying it to the image, because
-    a subsequent transform may need the output of the previous one.
-
-    Args:
-        transform_gens: List of :class:`TransformGen` instance to be applied.
-        image: Array of shape HxW or HxWx3.
-
-    Returns:
-        ndarray: The transformed image.
-        TransformList: Contain the transforms that's used to other data.
-    """
-    for g in transform_gens:
-        assert isinstance(g, TransformGen), g
-
-    tfms = []
-    for g in transform_gens:
-        tfm = g.get_transform(image)
-        if not isinstance(tfm, Transform):
-            raise TypeError(
-                'TransformGen {} must return an instance of Transform! Got {} instead'.format(
-                    g, tfm
-                )
-            )
-        image = tfm.apply_image(image)
-        tfms.append(tfm)
-    return image, TransformList(tfms)
 
 
 @TransformGenRegistry.register('RandomApply')
