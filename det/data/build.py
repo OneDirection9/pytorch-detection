@@ -63,7 +63,7 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
         if 'metadata' in cfg:
             cfg['metadata'] = build(MetadataRegistry, cfg['metadata'])
 
-    # Build datasets
+    # Build vision datasets
     vision_datasets = [build(VisionDatasetRegistry, cfg) for cfg in ds_cfg]
     return vision_datasets
 
