@@ -7,11 +7,11 @@ from foundation.transforms import Transform, TransformList
 
 from .transform_gen import TransformGen
 
-__all__ = ['apply_transform_gens']
+__all__ = ['apply_transforms']
 
 
-def apply_transform_gens(
-    transform_gens: List[Union[Transform, TransformGen]],
+def apply_transforms(
+    transforms: List[Union[Transform, TransformGen]],
     image: np.ndarray,
 ) -> Tuple[np.ndarray, TransformList]:
     """Applies a list of :class:`Transform` or :class:`TransformGen` on the input image, and
@@ -21,19 +21,19 @@ def apply_transform_gens(
     a subsequent transform may need the output of the previous one.
 
     Args:
-        transform_gens: List of :class:`Transform` or :class:`TransformGen` instance to be applied.
+        transforms: List of :class:`Transform` or :class:`TransformGen` instance to be applied.
         image: Array of shape HxW or HxWx3.
 
     Returns:
         ndarray: The transformed image.
         TransformList: Contain the transforms that's used to other data.
     """
-    for g in transform_gens:
+    for g in transforms:
         if not isinstance(g, (Transform, TransformGen)):
             raise TypeError('Expected Transform or TransformGen. But got {}'.format(type(g)))
 
     tfms = []
-    for g in transform_gens:
+    for g in transforms:
         tfm = g.get_transform(image) if isinstance(g, TransformGen) else g
         if not isinstance(tfm, Transform):
             raise TypeError(

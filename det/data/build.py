@@ -18,12 +18,12 @@ from typing import Any, Dict, List, Optional, Union
 from foundation.registry import build
 from foundation.transforms import Transform
 
+from . import utils
 from .common import DatasetFromList, MapDataset
-from .dataset_mapper import DatasetMapper, DatasetMapperRegistry
+from .dataset_mapper import DatasetMapperRegistry
 from .datasets import MetadataRegistry, VisionDataset, VisionDatasetRegistry
 from .pipelines import Pipeline, PipelineRegistry
 from .transforms import TransformGen, TransformGenRegistry, TransformRegistry
-from .utils import check_metadata_consistency
 
 __all__ = [
     'build_vision_datasets',
@@ -56,7 +56,7 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
         ds_cfg = [ds_cfg]
 
     if len(ds_cfg) == 0:
-        raise ValueError('None dataset is available')
+        raise ValueError('None vision dataset is available')
 
     # Build metadata
     for cfg in ds_cfg:
@@ -64,8 +64,8 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
             cfg['metadata'] = build(MetadataRegistry, cfg['metadata'])
 
     # Build datasets
-    datasets = [build(VisionDatasetRegistry, cfg) for cfg in ds_cfg]
-    return datasets
+    vision_datasets = [build(VisionDatasetRegistry, cfg) for cfg in ds_cfg]
+    return vision_datasets
 
 
 def build_pipelines(ppl_cfg: _CfgType) -> List[Pipeline]:
@@ -88,17 +88,17 @@ def build_pipelines(ppl_cfg: _CfgType) -> List[Pipeline]:
     return pipelines
 
 
-def build_transform_gens(tfm_cfg: _CfgType) -> List[TransformGen]:
-    """Builds transform generators from config.
+def build_transforms(tfm_cfg: _CfgType) -> List[Union[Transform, TransformGen]]:
+    """Builds transforms from config.
 
     Args:
-        tfm_cfg: Transform generator config that should be a dictionary or a list of dictionaries,
+        tfm_cfg: Transform configs that should be a dictionary or a list of dictionaries,
             each looks something like:
             {'name': 'RandomHFlip',
              'prob': 0.5}
 
     Returns:
-        List of transform generators.
+        List of transforms, either :class:`Transform` or :class:`TransformGen`.
     """
     if isinstance(tfm_cfg, dict):
         tfm_cfg = [tfm_cfg]
@@ -119,32 +119,16 @@ def build_transform_gens(tfm_cfg: _CfgType) -> List[TransformGen]:
             return build(TransformGenRegistry, _cfg)
         else:
             raise KeyError(
-                '{} is not registered in TransformGenRegistry or TransformRegistry'.format(name)
+                '{} registered in neither TransformRegistry nor TransformGenRegistry'.format(name)
             )
 
-    tfm_gens = []
+    transforms = []
     for cfg in tfm_cfg:
         if cfg['name'] == 'RandomApply':
             cfg['transform'] = _build(cfg['transform'])
-        tfm_gens.append(_build(cfg))
+        transforms.append(_build(cfg))
 
-    return tfm_gens
-
-
-def build_dataset_mapper(mapper_cfg: _SingleCfg) -> DatasetMapper:
-    """Builds dataset mapper from config.
-
-    Args:
-        mapper_cfg: Mapper config and we can have one and only one mapper. And transform_gen will
-            also be build, if provided.
-
-    Returns:
-        A mapper.
-    """
-    if 'transform_gens' in mapper_cfg:
-        mapper_cfg['transform_gens'] = build_transform_gens(mapper_cfg['transform_gens'])
-    mapper = build(DatasetMapperRegistry, mapper_cfg)
-    return mapper
+    return transforms
 
 
 def get_dataset_examples(
@@ -190,33 +174,65 @@ def get_dataset_examples(
     return examples
 
 
-def build_train_dataloader(cfg: Dict[str, Any]):
-    """Builds train dataloader from all config.
+def build_pytorch_dataset(data_cfg: Dict[str, Any]):
+    """Builds PyTorch dataset from config.
 
     Args:
-        cfg: Config that loaded from .yaml file.
+        data_cfg: Data config that should be a dictionary, looks something like:
+            {'datasets': [{'name': 'COCOInstance',
+                           'json_file': './data/MSCOCO/annotations/instances_train2014.json',
+                           'metadata': {'name': 'COCOInstanceMetadata'}}],
+             'pipelines': [{'name': 'FewKeypointsFilter', 'min_keypoints_per_image': 0},
+                           {'name': 'FormatConverter'}],
+             'dataset_mapper': {'name': 'DictMapper',
+                                'transform_gens': [{'name': 'RandomApply',
+                                                    'transform': {'name': 'RandomHFlip'}},
+                                                   {'name': 'Resize', 'shape': 100}]}}
     """
-    _cfg = cfg['data']['train']
+    vision_datasets = build_vision_datasets(data_cfg['datasets'])
 
-    datasets = build_vision_datasets(_cfg['datasets'])
-    if 'pipelines' in _cfg:
-        pipelines = build_pipelines(_cfg['pipelines'])
+    if 'pipelines' in data_cfg:
+        pipelines = build_pipelines(data_cfg['pipelines'])
     else:
         pipelines = None
-    examples = get_dataset_examples(datasets, pipelines)
+    examples = get_dataset_examples(vision_datasets, pipelines)
 
     # Check metadata across multiple datasets
     has_instances = 'annotations' in examples[0]
     if has_instances:
         try:
-            check_metadata_consistency('thing_classes', datasets)
+            utils.check_metadata_consistency('thing_classes', vision_datasets)
         except AttributeError:  # class names are not available for this dataset
             pass
 
+    if has_instances:
+        has_keypoints = 'keypoints' in examples[0]['annotations'][0]
+    else:
+        has_keypoints = False
+
     dataset = DatasetFromList(examples, copy=True, serialization=True)
 
-    if 'dataset_mapper' in _cfg:
-        dataset_mapper = build_dataset_mapper(_cfg['dataset_mapper'])
+    if 'dataset_mapper' in data_cfg:
+        # Build dataset mapper
+        mapper_cfg = data_cfg['dataset_mapper']
+        if 'transforms' in mapper_cfg:
+            mapper_cfg['transforms'] = build_transforms(mapper_cfg['transforms'])
+            if has_keypoints:
+                mapper_cfg['keypoint_hflip_indices'] = utils.create_keypoint_hflip_indices(
+                    vision_datasets
+                )
+        dataset_mapper = build(DatasetMapperRegistry, mapper_cfg)
         dataset = MapDataset(dataset, dataset_mapper)
+
+    return dataset
+
+
+def build_train_dataloader(cfg: _SingleCfg):
+    """Build training dataloader from all config.
+
+    Args:
+        cfg: Config which loads from a .yaml file.
+    """
+    dataset = build_pytorch_dataset(cfg['data']['train'])
 
     return dataset

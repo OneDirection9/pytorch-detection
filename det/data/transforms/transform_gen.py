@@ -56,7 +56,7 @@ class TransformGen(object, metaclass=ABCMeta):
     is that the image itself is sufficient to instantiate a transform.
     When this assumption is not true, you need to create the transforms by your own.
 
-    A list of `TransformGen` can be applied with :func:`apply_transform_gens`.
+    A list of `TransformGen` can be applied with :func:`apply_transforms`.
     """
 
     def __init__(self) -> None:

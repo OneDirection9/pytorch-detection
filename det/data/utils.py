@@ -13,38 +13,42 @@ from ..structures import BoxMode
 from .datasets import VisionDataset
 from .transforms import RandomCrop
 
-__all__ = ['check_metadata_consistency', 'gen_crop_transform_with_instance']
+__all__ = [
+    'check_metadata_consistency',
+    'gen_crop_transform_with_instance',
+    'create_keypoint_hflip_indices',
+]
 
 logger = logging.getLogger(__name__)
 
 
-def check_metadata_consistency(name: str, datasets: List[VisionDataset]) -> None:
+def check_metadata_consistency(name: str, vision_datasets: List[VisionDataset]) -> None:
     """Checks that the datasets have consistent metadata.
 
     Args:
         name: A metadata key.
-        datasets: List of datasets.
+        vision_datasets: List of datasets.
 
     Raises:
         AttributeError: If the `name` does not exist in the metadata
         ValueError: If the given datasets do not have the same metadata values defined by `name`.
     """
-    if len(datasets) == 0:
-        return
+    if len(vision_datasets) == 0:
+        raise ValueError('None vision dataset is available')
 
-    entries_per_dataset = [ds.metadata.get(name) for ds in datasets]
+    entries_per_dataset = [ds.metadata.get(name) for ds in vision_datasets]
     for idx, entry in enumerate(entries_per_dataset):
         if entry != entries_per_dataset[0]:
             logger.error(
                 "Metadata '{}' for dataset '{}' is '{}'.".format(
                     name,
-                    type(datasets[idx]).__name__, entry
+                    type(vision_datasets[idx]).__name__, entry
                 )
             )
             logger.error(
                 "Metadata '{}' for dataset '{}' is '{}'.".format(
                     name,
-                    type(datasets[0]).__name__, entries_per_dataset[0]
+                    type(vision_datasets[0]).__name__, entries_per_dataset[0]
                 )
             )
             raise ValueError("Datasets have different '{}'!".format(name))
@@ -86,3 +90,27 @@ def gen_crop_transform_with_instance(
     y0 = np.random.randint(min_yx[0], max_yx[0] + 1)
     x0 = np.random.randint(min_yx[1], max_yx[1] + 1)
     return CropTransform(x0, y0, crop_size[1], crop_size[0])
+
+
+def create_keypoint_hflip_indices(vision_datasets: List[VisionDataset]) -> np.ndarray:
+    """
+    Args:
+        vision_datasets: List of datasets.
+
+    Returns:
+        np.ndarray[int]: A vector of size=#keypoints, storing the horizontally-flipped keypoint
+            indices.
+    """
+    from ipdb import set_trace
+    set_trace()
+    check_metadata_consistency('keypoint_names', vision_datasets)
+    check_metadata_consistency('keypoint_flip_map', vision_datasets)
+
+    metadata = vision_datasets[0].metadata
+    names = metadata.get('keypoint_names')
+    hflip_map = dict(metadata.get('keypoint_flip_map'))
+    hflip_map.update({v: k for k, v in hflip_map.items()})
+
+    flipped_names = [i if i not in hflip_map else hflip_map[i] for i in names]
+    flip_indices = [names.index(i) for i in flipped_names]
+    return np.asarray(flip_indices)
