@@ -160,10 +160,16 @@ class FewKeypointsFilter(Pipeline):
 
 @PipelineRegistry.register('FormatConverter')
 class FormatConverter(Pipeline):
-    """A class that converts format acceptable by :class:`Transform` inplace."""
+    """A class that converts format acceptable by :class:`Transform` inplace.
+
+    This class do following converts:
+    1. Convert bounding box to np.ndarray of shape Nx4 in XYXY_ABS format.
+    2. Convert polygons to list of np.ndarray of shape Nx2, uncompressed RLE/RLE to 2D np.ndarray.
+    3. Convert keypoints to np.ndarray of shape Nx3.
+    """
 
     def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        h, w = example['height'], example['width']
+        h, w = example.get('height', None), example.get('width', None)
         annotations: List[Dict[str, Any]] = example['annotations']
         for ann in annotations:
             bbox = np.asarray(ann['bbox']).reshape(-1, 4)
@@ -175,11 +181,25 @@ class FormatConverter(Pipeline):
                 segm = ann['segmentation']
                 if isinstance(segm, list):
                     # polygons
-                    ann['segmentation'] = [np.asarray(p).reshape(-1, 2) for p in segm]
+                    ann['segmentation'] = [np.asarray(p).flatten().reshape(-1, 2) for p in segm]
                 elif isinstance(segm, dict):
-                    # RLE
-                    mask = mask_util.decode(segm)
-                    assert tuple(mask.shape[:2]) == (h, w), 'Size mismatch segmentation v.s. image'
+                    if 'counts' in segm and isinstance(segm['counts'], list):
+                        # uncompressed RLE
+                        mask = mask_util.decode(
+                            mask_util.frPyObjects(segm, segm['size'][0], segm['size'][1])
+                        )
+                    else:
+                        # RLE
+                        mask = mask_util.decode(segm)
+
+                    if h is not None and w is not None:
+                        image_hw = (h, w)
+                        segm_hw = tuple(mask.shape[:2])
+                        if not image_hw == segm_hw:
+                            raise ValueError(
+                                'Size mismatch between image and segmentation. '
+                                'Expect ({}), got ({}) in (H, W)'.format(image_hw, segm_hw)
+                            )
                     ann['segmentation'] = mask
                 else:
                     raise TypeError(
