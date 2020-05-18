@@ -183,7 +183,7 @@ class FormatConverter(Pipeline):
                     # polygons
                     ann['segmentation'] = [np.asarray(p).flatten().reshape(-1, 2) for p in segm]
                 elif isinstance(segm, dict):
-                    if 'counts' in segm and isinstance(segm['counts'], list):
+                    if isinstance(segm['counts'], list):
                         # uncompressed RLE
                         mask = mask_util.decode(
                             mask_util.frPyObjects(segm, segm['size'][0], segm['size'][1])
