@@ -17,10 +17,11 @@ from typing import Any, Dict, List, Optional, Union
 
 from foundation.registry import build
 from foundation.transforms import Transform
+from torch.utils.data import Dataset
 
 from . import utils
 from .common import DatasetFromList, MapDataset
-from .dataset_mapper import DatasetMapperRegistry
+from .dataset_mapper import DatasetMapper, DatasetMapperRegistry
 from .datasets import MetadataRegistry, VisionDataset, VisionDatasetRegistry
 from .pipelines import Pipeline, PipelineRegistry
 from .transforms import TransformGen, TransformGenRegistry, TransformRegistry
@@ -131,6 +132,20 @@ def build_transforms(tfm_cfg: _CfgType) -> List[Union[Transform, TransformGen]]:
     return transforms
 
 
+def build_dataset_mapper(
+    mapper_cfg: _SingleCfg, has_keypoints: bool, vision_datasets: List[VisionDataset]
+) -> DatasetMapper:
+    if 'transforms' in mapper_cfg:
+        mapper_cfg['transforms'] = build_transforms(mapper_cfg['transforms'])
+
+    if has_keypoints:
+        mapper_cfg['keypoint_hflip_indices'] = utils.create_keypoint_hflip_indices(vision_datasets)
+
+    # Build dataset mapper
+    dataset_mapper = build(DatasetMapperRegistry, mapper_cfg)
+    return dataset_mapper
+
+
 def get_dataset_examples(
     datasets: List[VisionDataset],
     pipelines: Optional[List[Pipeline]] = None,
@@ -174,7 +189,7 @@ def get_dataset_examples(
     return examples
 
 
-def build_pytorch_dataset(data_cfg: Dict[str, Any]):
+def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
     """Builds PyTorch dataset from config.
 
     Args:
@@ -190,11 +205,21 @@ def build_pytorch_dataset(data_cfg: Dict[str, Any]):
                                                    {'name': 'Resize', 'shape': 100}]}}
     """
     vision_datasets = build_vision_datasets(data_cfg['datasets'])
-
     if 'pipelines' in data_cfg:
         pipelines = build_pipelines(data_cfg['pipelines'])
     else:
         pipelines = None
+    # examples is a list[dict], where each dict is a record for an image. Example of examples:
+    # ['file_name': './data/MSCOCO/train2017/000000000036.jpg'
+    #  'height': 640,
+    #  'width': 481,
+    #  'image_id': 36,
+    #  'annotations: [{'iscrowd': 0,
+    #                  'bbox': [167.58, 162.89, 478.19, 628.08],
+    #                  'segmentation': [345.28, 220.68, ...],
+    #                  'keypoints': [250.5, 244.5, 2, ...],
+    #                  'category_id': 0},
+    #  ...]
     examples = get_dataset_examples(vision_datasets, pipelines)
 
     # Check metadata across multiple datasets
@@ -213,15 +238,9 @@ def build_pytorch_dataset(data_cfg: Dict[str, Any]):
     dataset = DatasetFromList(examples, copy=True, serialization=True)
 
     if 'dataset_mapper' in data_cfg:
-        # Build dataset mapper
-        mapper_cfg = data_cfg['dataset_mapper']
-        if 'transforms' in mapper_cfg:
-            mapper_cfg['transforms'] = build_transforms(mapper_cfg['transforms'])
-            if has_keypoints:
-                mapper_cfg['keypoint_hflip_indices'] = utils.create_keypoint_hflip_indices(
-                    vision_datasets
-                )
-        dataset_mapper = build(DatasetMapperRegistry, mapper_cfg)
+        dataset_mapper = build_dataset_mapper(
+            data_cfg['dataset_mapper'], has_keypoints, vision_datasets
+        )
         dataset = MapDataset(dataset, dataset_mapper)
 
     return dataset

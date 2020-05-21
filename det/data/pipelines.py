@@ -111,7 +111,7 @@ class Compose(object):
 
 @PipelineRegistry.register('CrowdFilter')
 class CrowdFilter(Pipeline):
-    """A pipeline that filter out crowd annotations.
+    """Filtering out crowd annotations.
 
     Returns None if none annotations or images with only crowd annotations.
     """
@@ -132,7 +132,7 @@ class CrowdFilter(Pipeline):
 
 @PipelineRegistry.register('FewKeypointsFilter')
 class FewKeypointsFilter(Pipeline):
-    """A pipeline that filter out images with too few number of keypoints."""
+    """Filtering out images with too few number of keypoints."""
 
     def __init__(self, min_keypoints_per_image: int) -> None:
         """
@@ -160,7 +160,7 @@ class FewKeypointsFilter(Pipeline):
 
 @PipelineRegistry.register('FormatConverter')
 class FormatConverter(Pipeline):
-    """A class that converts format acceptable by :class:`Transform` inplace.
+    """Converting annotations to the format acceptable by :class:`Transform` inplace.
 
     This class do following converts:
     1. Convert bounding box to np.ndarray of shape Nx4 in XYXY_ABS format.
@@ -210,4 +210,29 @@ class FormatConverter(Pipeline):
             if 'keypoints' in ann:
                 ann['keypoints'] = np.asarray(ann['keypoints'], dtype='float64').reshape(-1, 3)
 
+        return example
+
+
+@PipelineRegistry.register('AnnotationPopup')
+class AnnotationPopup(Pipeline):
+    """Popping up unused annotations."""
+
+    def __init__(self, mask_on: bool = False, keypoint_on: bool = False) -> None:
+        """
+        Args:
+            mask_on: If False, remove segmentation annotations.
+            keypoint_on: If False, remove keypoints annotations.
+        """
+        super(AnnotationPopup, self).__init__()
+
+        self.mask_on = mask_on
+        self.keypoint_on = keypoint_on
+
+    def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        annotations: List[Dict[str, Any]] = example['annotations']
+        for ann in annotations:
+            if not self.mask_on:
+                ann.pop('segmentation', None)
+            if not self.keypoint_on:
+                ann.pop('keypoints', None)
         return example
