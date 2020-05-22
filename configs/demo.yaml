@@ -47,6 +47,8 @@ dataloader:
     aspect_ratio_grouping: True
     images_per_batch: 2
     num_workers: 0
+  test:
+    num_workers: 0
 
 
 model:
