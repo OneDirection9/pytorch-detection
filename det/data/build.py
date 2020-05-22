@@ -272,7 +272,7 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
 
 
 def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
-    """Build training dataloader from all config.
+    """Builds training dataloader from all config.
 
     Args:
         cfg: Config which loads from a .yaml file.
@@ -314,7 +314,7 @@ def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
 
 
 def build_test_dataloader(cfg: _SingleCfg) -> DataLoader:
-    """Build training dataloader from all config.
+    """Builds test dataloader from all config.
 
     Args:
         cfg: Config which loads from a .yaml file.
