@@ -294,6 +294,7 @@ def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
     if aspect_ratio_grouping:
         data_loader = DataLoader(
             dataset,
+            batch_size=1,
             sampler=sampler,
             num_workers=num_workers,
             collate_fn=operator.itemgetter(0),  # don't batch, but yield individual elements
