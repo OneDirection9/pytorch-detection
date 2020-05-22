@@ -6,8 +6,9 @@ The workflow of data is:
     1.2. Pass each example through zero or more :class:`Pipeline` to get a new list of examples.
     1.3. Pass new examples to :class:`DatasetFromList` to get a dataset.
 2. Build final dataset:
-    2.1. Build :class:`BaseMapper` and build :class:`TransformGen` if needed.
+    2.1. Build :class:`BaseMapper` and build :class:`Transform` or :class:`TransformGen` if needed.
     2.2. Pass mapper to :class:`MapDataset` to get final dataset.
+3. Build dataloader
 """
 from __future__ import absolute_import, division, print_function
 
@@ -28,11 +29,18 @@ from .common import AspectRatioGroupedDataset, DatasetFromList, MapDataset
 from .dataset_mapper import DatasetMapper, DatasetMapperRegistry
 from .datasets import MetadataRegistry, VisionDataset, VisionDatasetRegistry
 from .pipelines import Pipeline, PipelineRegistry
-from .samplers import InferenceSampler, TrainingSampler
+from .samplers import InferenceSampler, SamplerRegistry
 from .transforms import TransformGen, TransformGenRegistry, TransformRegistry
 
 __all__ = [
+    'build_vision_datasets',
+    'build_pipelines',
+    'build_transforms',
+    'build_dataset_mapper',
+    'get_dataset_examples',
+    'build_pytorch_dataset',
     'build_train_dataloader',
+    'build_test_dataloader',
 ]
 
 logger = logging.getLogger(__name__)
@@ -219,9 +227,9 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
              'pipelines': [{'name': 'FewKeypointsFilter', 'min_keypoints_per_image': 0},
                            {'name': 'FormatConverter'}],
              'dataset_mapper': {'name': 'DictMapper',
-                                'transform_gens': [{'name': 'RandomApply',
-                                                    'transform': {'name': 'RandomHFlip'}},
-                                                   {'name': 'Resize', 'shape': 100}]}}
+                                'transforms': [{'name': 'RandomApply',
+                                                'transform': {'name': 'RandomHFlip'}},
+                                               ...]}}
     """
     vision_datasets = build_vision_datasets(data_cfg['datasets'])
     if 'pipelines' in data_cfg:
@@ -254,11 +262,7 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
     dataset = DatasetFromList(examples, copy=True, serialization=True)
 
     if 'dataset_mapper' in data_cfg:
-        if has_instances:
-            has_keypoints = 'keypoints' in examples[0]['annotations'][0]
-        else:
-            has_keypoints = False
-
+        has_keypoints = has_instances and 'keypoints' in examples[0]['annotations'][0]
         dataset_mapper = build_dataset_mapper(
             data_cfg['dataset_mapper'], has_keypoints, vision_datasets
         )
@@ -278,11 +282,9 @@ def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
     dl_cfg = cfg['dataloader']['train']
 
     # Build sampler
-    sampler_name = dl_cfg['sampler']
-    if sampler_name == 'TrainingName':
-        sampler = TrainingSampler(len(dataset))
-    else:
-        raise ValueError('Unknown training sampler: {}'.format(sampler_name))
+    sampler_cfg = dl_cfg['sampler']
+    sampler_cfg['data_source'] = dataset
+    sampler = build(SamplerRegistry, sampler_cfg)
 
     world_size = get_world_size()
     # images_per_batch: Number of images per batch across all machines
@@ -321,7 +323,7 @@ def build_test_dataloader(cfg: _SingleCfg) -> DataLoader:
 
     dl_cfg = cfg['dataloader']['test']
 
-    sampler = InferenceSampler(len(dataset))
+    sampler = InferenceSampler(dataset)
     # Always use 1 image per worker during inference since this is the
     # standard when reporting inference time in papers
     batch_sampler = BatchSampler(sampler, 1, drop_last=False)

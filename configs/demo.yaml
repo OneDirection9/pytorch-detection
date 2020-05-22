@@ -42,7 +42,8 @@ data:
 
 dataloader:
   train:
-    sampler: TrainingSampler
+    sampler:
+      name: TrainingSampler
     aspect_ratio_grouping: True
     images_per_batch: 2
     num_workers: 0

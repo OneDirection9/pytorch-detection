@@ -4,16 +4,23 @@
 from __future__ import absolute_import, division, print_function
 
 import itertools
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Union
 
 import torch
-from torch.utils.data.sampler import Sampler
+from foundation.registry import Registry
+from torch.utils.data import Dataset, Sampler
 
 from ...utils import comm
 
-__all__ = ['TrainingSampler', 'InferenceSampler']
+__all__ = ['SamplerRegistry', 'TrainingSampler', 'InferenceSampler']
 
 
+class SamplerRegistry(Registry):
+    """Registry of samplers."""
+    pass
+
+
+@SamplerRegistry.register('TrainingSampler')
 class TrainingSampler(Sampler):
     """
     In training, we only care about the "infinite stream" of training data. So this sampler produces
@@ -26,17 +33,26 @@ class TrainingSampler(Sampler):
     or `range(size) + range(size) + ...` (if shuffle is False).
     """
 
-    def __init__(self, size: int, shuffle: bool = True, seed: Optional[int] = None) -> None:
+    def __init__(
+        self,
+        data_source: Union[list, Dataset],
+        shuffle: bool = True,
+        seed: Optional[int] = None
+    ) -> None:
         """
         Args:
-            size: The total number of data of the underlying dataset to sample from.
+            data_source: :class:`Dataset` instance or a list that has all elements and implements
+                :meth:`__len__` which is the total number of data of the underlying dataset to
+                sample from.
             shuffle: Whether to shuffle the indices or not.
             seed: The initial seed of the shuffle. Must be the same across all workers. If None,
                 will use a random seed shared among workers (require synchronization among all
                 workers).
         """
-        self._size = size
+        size = len(data_source)
         assert size > 0
+        self._size = size
+
         self._shuffle = shuffle
         if seed is None:
             seed = comm.shared_random_seed()
@@ -59,6 +75,7 @@ class TrainingSampler(Sampler):
                 yield from torch.arange(self._size)
 
 
+@SamplerRegistry.register('InferenceSampler')
 class InferenceSampler(Sampler):
     """Produces indices for inference.
 
@@ -67,13 +84,16 @@ class InferenceSampler(Sampler):
     this sampler produces different number of samples on different workers.
     """
 
-    def __init__(self, size: int) -> None:
+    def __init__(self, data_source: Union[list, Dataset]) -> None:
         """
         Args:
-            size: The total number of data of the underlying dataset to sample from.
+            data_source: :class:`Dataset` instance or a list that has all elements and implements
+                :meth:`__len__` which is the total number of data of the underlying dataset to
+                sample from.
         """
-        self._size = size
+        size = len(data_source)
         assert size > 0
+        self._size = size
         self._rank = comm.get_rank()
         self._world_size = comm.get_world_size()
 
