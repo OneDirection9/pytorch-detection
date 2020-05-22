@@ -6,6 +6,7 @@ This file contains the default mapping that's applied to dataset dict.
 """
 from __future__ import absolute_import, division, print_function
 
+import copy
 import logging
 from abc import ABCMeta, abstractmethod
 from typing import Any, Dict, List, Optional, Union
@@ -14,6 +15,7 @@ import numpy as np
 from foundation.registry import Registry
 from foundation.transforms import Transform
 
+from . import transforms as T, utils
 from .transforms import TransformGen
 
 logger = logging.getLogger(__name__)
@@ -55,21 +57,44 @@ class DictMapper(DatasetMapper):
 
     def __init__(
         self,
-        image_format=1,
-        mask_on=1,
-        mask_format=1,
-        keypoint_on=1,
+        image_format: Optional[str] = 'BGR',
+        mask_format: Optional[str] = 'polygon',
+        training: bool = True,
         transforms: Optional[List[Union[Transform, TransformGen]]] = None,
         keypoint_hflip_indices: Optional[np.ndarray] = None,
     ) -> None:
         super(DictMapper, self).__init__(transforms, keypoint_hflip_indices)
 
+        if mask_format not in ('polygon', 'bitmask'):
+            raise ValueError('mask_format should be polygon or bitmask. Got {}'.format(mask_format))
+
         self.image_format = image_format
-        self.mask_on = mask_on
         self.mask_format = mask_format
-        self.keypoint_on = keypoint_on
+        self.training = training
 
     def __call__(self, example: Dict[str, Any]) -> Optional[Any]:
+        example = copy.deepcopy(example)  # deepcopy to avoid modifying raw data
+
+        image = utils.read_image(example['file_name'], self.image_format)
+        utils.check_image_size(example, image)
+
+        if 'annotations' in example:
+            # Crop around an instance if there are instances in the image.
+            new_transforms = []
+            for tfm in self.transforms:
+                if isinstance(tfm, T.RandomCrop):
+                    new_transforms.append(
+                        utils.gen_crop_transform_with_instance(tfm, image, example['annotations'])
+                    )
+                else:
+                    new_transforms.append(tfm)
+            image, transforms = T.apply_transforms(new_transforms, image)
+        else:
+            image, transforms = T.apply_transforms(self.transforms, image)
+
+        from ipdb import set_trace
+        set_trace()
+
         return example
 
     def __repr__(self):

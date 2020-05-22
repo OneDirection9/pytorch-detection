@@ -259,7 +259,7 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
         except AttributeError:  # class names are not available for this dataset
             pass
 
-    dataset = DatasetFromList(examples, copy=True, serialization=True)
+    dataset = DatasetFromList(examples, copy=False, serialization=True)
 
     if 'dataset_mapper' in data_cfg:
         has_keypoints = has_instances and 'keypoints' in examples[0]['annotations'][0]
@@ -289,8 +289,10 @@ def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
     world_size = get_world_size()
     # images_per_batch: Number of images per batch across all machines
     batch_size = dl_cfg['images_per_batch'] // world_size
+
     num_workers = dl_cfg['num_workers']
     aspect_ratio_grouping = dl_cfg['aspect_ratio_grouping']
+
     if aspect_ratio_grouping:
         data_loader = DataLoader(
             dataset,

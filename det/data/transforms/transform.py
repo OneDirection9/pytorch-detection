@@ -17,7 +17,6 @@ from foundation.transforms import (
     is_numpy,
     is_numpy_coords,
     is_numpy_image,
-    is_numpy_segmentation,
 )
 from PIL import Image
 
@@ -108,11 +107,6 @@ class ExtentTransform(Transform):
         return new_coords
 
     def apply_segmentation(self, segmentation: np.ndarray) -> np.ndarray:
-        if not is_numpy(segmentation):
-            raise TypeError('segmentation should be np.ndarray. Got {}'.format(type(segmentation)))
-        if not is_numpy_segmentation(segmentation):
-            raise ValueError('segmentation should be 2D. Got {}D'.format(segmentation.ndim))
-
         return self.apply_image(segmentation, interp='nearest')
 
 
@@ -200,11 +194,6 @@ class RotationTransform(Transform):
         return cv2.transform(coords[:, np.newaxis, :], self.rm_coords)[:, 0, :]
 
     def apply_segmentation(self, segmentation: np.ndarray) -> np.ndarray:
-        if not is_numpy(segmentation):
-            raise TypeError('segmentation should be np.ndarray. Got {}'.format(type(segmentation)))
-        if not is_numpy_segmentation(segmentation):
-            raise ValueError('segmentation should be 2D. Got {}D'.format(segmentation.ndim))
-
         return self.apply_image(segmentation, interp='nearest')
 
     def create_rotation_matrix(self, offset: float = 0.) -> np.ndarray:

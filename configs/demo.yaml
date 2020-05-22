@@ -25,13 +25,7 @@ data:
         - name: RandomApply
           transform:
             name: RandomHFlip
-        - name: ExtentTransform
-          src_rect: [0, 0, 0, 0]
-          output_size: [100, 100]
         - name: RandomHFlip
-        - name: RandomVFlip
-        - name: Resize
-          shape: 100
         - name: ResizeShortestEdge
           short: 600
           max_size: 1000

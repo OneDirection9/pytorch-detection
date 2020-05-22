@@ -20,6 +20,7 @@ __all__ = [
     'CrowdFilter',
     'FewKeypointsFilter',
     'FormatConverter',
+    'AnnotationPopup',
 ]
 
 
@@ -163,7 +164,7 @@ class FormatConverter(Pipeline):
     """Converting annotations to the format acceptable by :class:`Transform` inplace.
 
     This class do following converts:
-    1. Convert bounding box to np.ndarray of shape Nx4 in XYXY_ABS format.
+    1. Convert bounding box to XYXY_ABS format.
     2. Convert polygons to list of np.ndarray of shape Nx2, uncompressed RLE/RLE to 2D np.ndarray.
     3. Convert keypoints to np.ndarray of shape Nx3.
     """
@@ -172,8 +173,7 @@ class FormatConverter(Pipeline):
         h, w = example.get('height', None), example.get('width', None)
         annotations: List[Dict[str, Any]] = example['annotations']
         for ann in annotations:
-            bbox = np.asarray(ann['bbox']).reshape(-1, 4)
-            bbox = BoxMode.convert(bbox, ann['bbox_mode'], BoxMode.XYXY_ABS)
+            bbox = BoxMode.convert(ann['bbox'], ann['bbox_mode'], BoxMode.XYXY_ABS)
             ann['bbox'] = bbox
             ann['bbox_mode'] = BoxMode.XYXY_ABS
 

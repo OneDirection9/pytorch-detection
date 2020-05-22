@@ -4,22 +4,85 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 from foundation.transforms import CropTransform
+from PIL import Image, ImageOps
 
 from ..structures import BoxMode
 from .datasets import VisionDataset
 from .transforms import RandomCrop
 
 __all__ = [
+    'read_image',
+    'check_image_size',
     'check_metadata_consistency',
     'gen_crop_transform_with_instance',
     'create_keypoint_hflip_indices',
 ]
 
 logger = logging.getLogger(__name__)
+
+
+def read_image(file_name: str, format: Optional[str] = None) -> np.ndarray:
+    """Read an image into the given format.
+
+    Will apply rotation and flipping if the image has such exif information.
+
+    Args:
+        file_name: Image file path
+        format: One of the supported image modes in PIL, or 'BGR'.
+
+    Returns:
+        image: An HWC image in the given format, which is 0-255, uint8 for supported image modes in
+            PIL or 'BGR'.
+    """
+    image = Image.open(file_name)
+
+    # capture and ignore this bug: https://github.com/python-pillow/Pillow/issues/3973
+    try:
+        image = ImageOps.exif_transpose(image)
+    except Exception:
+        pass
+
+    if format is not None:
+        # PIL only supports RGB, so convert to RGB and flip channels over below
+        conversion_format = format
+        if format == 'BGR':
+            conversion_format = 'RGB'
+        image = image.convert(conversion_format)
+    image = np.asarray(image)
+    # PIL squeezes out the channel dimension for 'L', so make it HWC
+    if format == 'L':
+        image = np.expand_dims(image, -1)
+
+    # Handle formats not supported by PIL
+    if format == 'BGR':
+        # flip channels if needed
+        image = image[:, :, ::-1]
+    return image
+
+
+def check_image_size(example: Dict[str, Any], image: np.ndarray) -> None:
+    """Checks image size between loaded array and annotation."""
+    h, w = image.shape[:2]
+
+    if 'width' in example or 'height' in example:
+        image_wh = (w, h)
+        expected_wh = (example['width'], example['height'])
+        if not image_wh == expected_wh:
+            raise ValueError(
+                'Mismatched (W, H){}. Got {}, expect {}'.format(
+                    ' for image' + example['file_name'] if 'file_name' in example else '', image_wh,
+                    expected_wh
+                )
+            )
+
+    if 'width' not in example:
+        example['width'] = w
+    if 'height' not in example:
+        example['height'] = h
 
 
 def check_metadata_consistency(name: str, vision_datasets: List[VisionDataset]) -> None:
@@ -64,9 +127,6 @@ def gen_crop_transform_with_instance(
         random_crop: :class:`RandomCrop` instance.
         image:
         annotations: Annotations in the format of a list of dictionaries.
-
-    Returns:
-
     """
     image_size = image.shape[:2]
     crop_size = random_crop.get_crop_size(image_size)
