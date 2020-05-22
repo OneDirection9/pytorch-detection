@@ -101,8 +101,6 @@ def create_keypoint_hflip_indices(vision_datasets: List[VisionDataset]) -> np.nd
         np.ndarray[int]: A vector of size=#keypoints, storing the horizontally-flipped keypoint
             indices.
     """
-    from ipdb import set_trace
-    set_trace()
     check_metadata_consistency('keypoint_names', vision_datasets)
     check_metadata_consistency('keypoint_flip_map', vision_datasets)
 

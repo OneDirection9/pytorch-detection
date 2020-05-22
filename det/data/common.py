@@ -7,17 +7,17 @@ import copy
 import logging
 import pickle
 import random
-from typing import Any, Callable
+from typing import Any, Callable, Dict, Iterable
 
 import numpy as np
-from torch.utils.data import Dataset
+import torch.utils.data as data
 
-__all__ = ['MapDataset', 'DatasetFromList']
+__all__ = ['MapDataset', 'DatasetFromList', 'AspectRatioGroupedDataset']
 
 logger = logging.getLogger(__name__)
 
 
-class MapDataset(Dataset):
+class MapDataset(data.Dataset):
     """A class that map a function over the elements in a dataset.
 
     Args:
@@ -27,7 +27,7 @@ class MapDataset(Dataset):
             use other elements from the dataset.
     """
 
-    def __init__(self, dataset: Dataset, map_func: Callable) -> None:
+    def __init__(self, dataset: data.Dataset, map_func: Callable) -> None:
         self._dataset = dataset
         self._map_func = map_func
 
@@ -60,7 +60,7 @@ class MapDataset(Dataset):
                 )
 
 
-class DatasetFromList(Dataset):
+class DatasetFromList(data.Dataset):
     """A class that wrap a list to a torch Dataset. It produces elements of the list as data."""
 
     def __init__(self, lst: list, copy: bool = True, serialization: bool = True) -> None:
@@ -111,3 +111,37 @@ class DatasetFromList(Dataset):
             return copy.deepcopy(item)
         else:
             return item
+
+
+class AspectRatioGroupedDataset(data.IterableDataset):
+    """Batch data that have similar aspect ratio together.
+
+    In this implementation, images whose aspect ratio < (or >) 1 will be batched together.
+    This improves training speed because the images then need less padding to form a batch.
+
+    It assumes the underlying dataset produces dicts with "width" and "height" keys. It will then
+    produce a list of original dicts with length = batch_size, all with similar aspect ratios.
+    """
+
+    def __init__(self, dataset: Iterable[Dict[str, Any]], batch_size: int) -> None:
+        """
+        Args:
+            dataset: An iterable. Each element must be a dict with keys "width" and "height", which
+                will be used to batch data.
+            batch_size (int):
+        """
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self._buckets = [[] for _ in range(2)]
+        # Hard-coded two aspect ratio groups: w > h and w < h.
+        # Can add support for more aspect ratio groups, but doesn't seem useful
+
+    def __iter__(self):
+        for d in self.dataset:
+            w, h = d['width'], d['height']
+            bucket_id = 0 if w > h else 1
+            bucket = self._buckets[bucket_id]
+            bucket.append(d)
+            if len(bucket) == self.batch_size:
+                yield bucket[:]
+                del bucket[:]

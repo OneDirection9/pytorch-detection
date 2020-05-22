@@ -47,20 +47,17 @@ class COCOInstance(VisionDataset):
             metadata: If provided, it should be consistent with the information in json file.
                 Otherwise, information in this json file will be loaded.
         """
+        super(COCOInstance, self).__init__(metadata)
+
         self.image_root = image_root
         self.json_file = json_file
         self.extra_annotation_keys = extra_annotation_keys or []
 
-        self._metadata = metadata if metadata is not None else Metadata()
         # Update dataset metadata
         self._metadata.set(**dict(
             image_root=image_root,
             json_file=json_file,
         ))
-
-    @property
-    def metadata(self) -> Metadata:
-        return self._metadata
 
     def get_examples(self) -> List[Dict[str, Any]]:
         timer = Timer()

@@ -1,7 +1,7 @@
 from __future__ import absolute_import, division, print_function
 
 from abc import ABCMeta, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from foundation.registry import Registry
 
@@ -32,11 +32,13 @@ class VisionDataset(object, metaclass=ABCMeta):
         dataset = DatasetFromList(examples)
     """
 
+    def __init__(self, metadata: Optional[Metadata] = None) -> None:
+        self._metadata = metadata if metadata is not None else Metadata()
+
     @property
-    @abstractmethod
     def metadata(self) -> Metadata:
         """Metadata which is useful in evaluation, visualization or logging."""
-        pass
+        return self._metadata
 
     @abstractmethod
     def get_examples(self) -> List[Dict[str, Any]]:

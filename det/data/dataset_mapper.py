@@ -70,7 +70,7 @@ class DictMapper(DatasetMapper):
         self.keypoint_on = keypoint_on
 
     def __call__(self, example: Dict[str, Any]) -> Optional[Any]:
-        pass
+        return example
 
     def __repr__(self):
         return self.transform_gens

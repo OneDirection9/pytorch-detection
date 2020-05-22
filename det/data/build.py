@@ -13,23 +13,26 @@ from __future__ import absolute_import, division, print_function
 
 import itertools
 import logging
+import operator
 from typing import Any, Dict, List, Optional, Union
 
+import numpy as np
 from foundation.registry import build
 from foundation.transforms import Transform
-from torch.utils.data import Dataset
+from torch.utils.data import BatchSampler, DataLoader, Dataset
 
+from ..utils.comm import get_world_size
+from ..utils.env import seed_all_rng
 from . import utils
-from .common import DatasetFromList, MapDataset
+from .common import AspectRatioGroupedDataset, DatasetFromList, MapDataset
 from .dataset_mapper import DatasetMapper, DatasetMapperRegistry
 from .datasets import MetadataRegistry, VisionDataset, VisionDatasetRegistry
 from .pipelines import Pipeline, PipelineRegistry
+from .samplers import InferenceSampler, TrainingSampler
 from .transforms import TransformGen, TransformGenRegistry, TransformRegistry
 
 __all__ = [
-    'build_vision_datasets',
-    'build_pipelines',
-    'get_dataset_examples',
+    'build_train_dataloader',
 ]
 
 logger = logging.getLogger(__name__)
@@ -105,7 +108,7 @@ def build_transforms(tfm_cfg: _CfgType) -> List[Union[Transform, TransformGen]]:
         tfm_cfg = [tfm_cfg]
 
     def _build(_cfg: _SingleCfg) -> Union[Transform, TransformGen]:
-        # We may pass a TransformGen or a Transform, so we need to discuss it.
+        # We may pass a Transform or a TransformGen, so we need to discuss it.
         name = _cfg['name']
         if TransformRegistry.contains(name) and TransformGenRegistry.contains(name):
             raise ValueError(
@@ -126,6 +129,7 @@ def build_transforms(tfm_cfg: _CfgType) -> List[Union[Transform, TransformGen]]:
     transforms = []
     for cfg in tfm_cfg:
         if cfg['name'] == 'RandomApply':
+            # Currently only RandomApply contains a nested transform
             cfg['transform'] = _build(cfg['transform'])
         transforms.append(_build(cfg))
 
@@ -135,6 +139,21 @@ def build_transforms(tfm_cfg: _CfgType) -> List[Union[Transform, TransformGen]]:
 def build_dataset_mapper(
     mapper_cfg: _SingleCfg, has_keypoints: bool, vision_datasets: List[VisionDataset]
 ) -> DatasetMapper:
+    """Builds dataset mapper.
+
+    Args:
+        mapper_cfg: Dataset mapper config that should be a dictionary, and looks something like:
+            {'name': 'DictMapper',
+             'transforms': [{'name': 'RandomHFlip',
+                             'prob': 0.5},
+                            ...]}
+        has_keypoints: Where has keypoints in annotations. If True, the keypoint_hflip_indices will
+            be created.
+        vision_datasets: List of vision datasets.
+
+    Returns:
+        The dataset mapper.
+    """
     if 'transforms' in mapper_cfg:
         mapper_cfg['transforms'] = build_transforms(mapper_cfg['transforms'])
 
@@ -219,6 +238,7 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
     #                  'segmentation': [345.28, 220.68, ...],
     #                  'keypoints': [250.5, 244.5, 2, ...],
     #                  'category_id': 0},
+    #                 ...]
     #  ...]
     examples = get_dataset_examples(vision_datasets, pipelines)
 
@@ -227,17 +247,18 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
     if has_instances:
         try:
             utils.check_metadata_consistency('thing_classes', vision_datasets)
+            # TODO: add print_instances_class_histogram
         except AttributeError:  # class names are not available for this dataset
             pass
-
-    if has_instances:
-        has_keypoints = 'keypoints' in examples[0]['annotations'][0]
-    else:
-        has_keypoints = False
 
     dataset = DatasetFromList(examples, copy=True, serialization=True)
 
     if 'dataset_mapper' in data_cfg:
+        if has_instances:
+            has_keypoints = 'keypoints' in examples[0]['annotations'][0]
+        else:
+            has_keypoints = False
+
         dataset_mapper = build_dataset_mapper(
             data_cfg['dataset_mapper'], has_keypoints, vision_datasets
         )
@@ -246,7 +267,7 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
     return dataset
 
 
-def build_train_dataloader(cfg: _SingleCfg):
+def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
     """Build training dataloader from all config.
 
     Args:
@@ -254,4 +275,71 @@ def build_train_dataloader(cfg: _SingleCfg):
     """
     dataset = build_pytorch_dataset(cfg['data']['train'])
 
-    return dataset
+    dl_cfg = cfg['dataloader']['train']
+
+    # Build sampler
+    sampler_name = dl_cfg['sampler']
+    if sampler_name == 'TrainingName':
+        sampler = TrainingSampler(len(dataset))
+    else:
+        raise ValueError('Unknown training sampler: {}'.format(sampler_name))
+
+    world_size = get_world_size()
+    # images_per_batch: Number of images per batch across all machines
+    batch_size = dl_cfg['images_per_batch'] // world_size
+    num_workers = dl_cfg['num_workers']
+    aspect_ratio_grouping = dl_cfg['aspect_ratio_grouping']
+    if aspect_ratio_grouping:
+        data_loader = DataLoader(
+            dataset,
+            sampler=sampler,
+            num_workers=num_workers,
+            collate_fn=operator.itemgetter(0),  # don't batch, but yield individual elements
+            worker_init_fn=worker_init_reset_seed,
+        )  # yield individual mapped dict
+        data_loader = AspectRatioGroupedDataset(data_loader, batch_size)
+    else:
+        batch_sampler = BatchSampler(sampler, batch_size, drop_last=True)
+        data_loader = DataLoader(
+            dataset,
+            num_workers=num_workers,
+            batch_sampler=batch_sampler,
+            collate_fn=trivial_batch_collator,
+            worker_init_fn=worker_init_reset_seed,
+        )
+
+    return data_loader
+
+
+def build_test_dataloader(cfg: _SingleCfg) -> DataLoader:
+    """Build training dataloader from all config.
+
+    Args:
+        cfg: Config which loads from a .yaml file.
+    """
+    dataset = build_pytorch_dataset(cfg['data']['test'])
+
+    dl_cfg = cfg['dataloader']['test']
+
+    sampler = InferenceSampler(len(dataset))
+    # Always use 1 image per worker during inference since this is the
+    # standard when reporting inference time in papers
+    batch_sampler = BatchSampler(sampler, 1, drop_last=False)
+
+    num_workers = dl_cfg['num_workers']
+    data_loader = DataLoader(
+        dataset,
+        num_workers=num_workers,
+        batch_sampler=batch_sampler,
+        collate_fn=trivial_batch_collator,
+    )
+    return data_loader
+
+
+def trivial_batch_collator(batch):
+    """A batch collator that does nothing."""
+    return batch
+
+
+def worker_init_reset_seed(worker_id):
+    seed_all_rng(np.random.randint(2 ** 31) + worker_id)

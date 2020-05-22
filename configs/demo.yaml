@@ -41,8 +41,12 @@ data:
           crop_size: [600, 600]
 
 dataloader:
-  images_per_gpu: 2
-  num_workers: 4
+  train:
+    sampler: TrainingSampler
+    aspect_ratio_grouping: True
+    images_per_batch: 2
+    num_workers: 0
+
 
 model:
   name: FasterRCNN
