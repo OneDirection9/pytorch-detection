@@ -141,8 +141,6 @@ class FewKeypointsFilter(Pipeline):
             min_keypoints_per_image: The image with visible keypoints less than
                 `min_keypoints_per_image` will be filtered out.
         """
-        super(FewKeypointsFilter, self).__init__()
-
         self.min_keypoints_per_image = min_keypoints_per_image
 
     def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -223,8 +221,6 @@ class AnnotationPopup(Pipeline):
             mask_on: If False, remove segmentation annotations.
             keypoint_on: If False, remove keypoints annotations.
         """
-        super(AnnotationPopup, self).__init__()
-
         self.mask_on = mask_on
         self.keypoint_on = keypoint_on
 
