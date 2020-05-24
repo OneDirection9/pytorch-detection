@@ -9,6 +9,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+import torch
 from foundation.registry import Registry
 from foundation.transforms import Transform
 
@@ -75,22 +76,27 @@ class DictMapper(DatasetMapper):
         image = utils.read_image(example['file_name'], self.image_format)
         utils.check_image_size(example, image)
 
-        if 'annotations' in example:
-            # Crop around an instance if there are instances in the image.
-            new_transforms = []
-            for tfm in self.transforms:
-                if isinstance(tfm, T.RandomCrop):
-                    new_transforms.append(
-                        utils.gen_crop_transform_with_instance(tfm, image, example['annotations'])
-                    )
-                else:
-                    new_transforms.append(tfm)
-            image, transforms = T.apply_transforms(new_transforms, image)
-        else:
-            image, transforms = T.apply_transforms(self.transforms, image)
+        if self.transforms is not None:
+            if 'annotations' in example:
+                # Crop around an instance if there are instances in the image.
+                new_transforms = []
+                for tfm in self.transforms:
+                    if isinstance(tfm, T.RandomCrop):
+                        new_transforms.append(
+                            utils.gen_crop_transform_with_instance(
+                                tfm, image, example['annotations']
+                            )
+                        )
+                    else:
+                        new_transforms.append(tfm)
+                image, transforms = T.apply_transforms(new_transforms, image)
+            else:
+                image, transforms = T.apply_transforms(self.transforms, image)
 
-        from ipdb import set_trace
-        set_trace()
+        # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
+        # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
+        # Therefore it's important to use torch.Tensor.
+        example['image'] = torch.as_tensor(np.ascontiguousarray(image.transpose((2, 0, 1))))
 
         return example
 
