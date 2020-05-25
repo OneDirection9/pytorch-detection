@@ -66,30 +66,45 @@ class DictMapper(DatasetMapper):
         if mask_format not in ('polygon', 'bitmask'):
             raise ValueError('mask_format should be polygon or bitmask. Got {}'.format(mask_format))
 
+        # TODO: better logic to handle RandomCrop
+        if transforms is not None:
+            for t in transforms[1:]:
+                if isinstance(t, T.RandomCrop):
+                    raise ValueError('RandomCrop can only be used once and as the first transform')
+            self.crop_gen = isinstance(transforms[0], T.RandomCrop)
+
         self.image_format = image_format
         self.mask_format = mask_format
         self.training = training
 
-    def __call__(self, example: Dict[str, Any]) -> Optional[Any]:
+    def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         example = copy.deepcopy(example)  # deepcopy to avoid modifying raw data
 
         image = utils.read_image(example['file_name'], self.image_format)
         utils.check_image_size(example, image)
 
+        if 'annotations' not in example:
+            image, transforms = T.apply_transforms(self.transforms, image)
+        else:
+            if self.crop_gen:
+                crop_tfm = utils.gen_crop_transform_with_instance(
+                    self.transforms[0],
+                    image,
+                    example['annotations'],
+                )
+                image = crop_tfm.apply_image(image)
+
         if self.transforms is not None:
-            if 'annotations' in example:
+            if 'annotations' in example and isinstance(self.transforms[0], T.RandomCrop):
                 # Crop around an instance if there are instances in the image.
-                new_transforms = []
-                for tfm in self.transforms:
-                    if isinstance(tfm, T.RandomCrop):
-                        new_transforms.append(
-                            utils.gen_crop_transform_with_instance(
-                                tfm, image, example['annotations']
-                            )
-                        )
-                    else:
-                        new_transforms.append(tfm)
-                image, transforms = T.apply_transforms(new_transforms, image)
+                crop_tfm = utils.gen_crop_transform_with_instance(
+                    self.transforms[0],
+                    image,
+                    example['annotations'],
+                )
+                image = crop_tfm.apply_image(image)
+                image, transforms = T.apply_transforms(self.transforms[1:], image)
+                transforms = crop_tfm + transforms
             else:
                 image, transforms = T.apply_transforms(self.transforms, image)
 
@@ -97,6 +112,14 @@ class DictMapper(DatasetMapper):
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.
         example['image'] = torch.as_tensor(np.ascontiguousarray(image.transpose((2, 0, 1))))
+
+        if not self.training:
+            example.pop('annotations', None)
+            example.pop('sem_seg_file_name', None)
+            return example
+
+        if self.transforms is None:
+            return example
 
         return example
 
