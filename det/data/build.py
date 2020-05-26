@@ -163,6 +163,7 @@ def build_dataset_mapper(
     """
     if 'transforms' in mapper_cfg:
         mapper_cfg['transforms'] = build_transforms(mapper_cfg['transforms'])
+        logger.info('Transforms: {}'.format(mapper_cfg['transforms']))
 
     if has_keypoints:
         mapper_cfg['keypoint_hflip_indices'] = utils.create_keypoint_hflip_indices(vision_datasets)

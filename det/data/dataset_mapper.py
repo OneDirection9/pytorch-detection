@@ -54,25 +54,24 @@ class DictMapper(DatasetMapper):
 
     def __init__(
         self,
+        transforms: List[Union[T.Transform, T.TransformGen]],
         image_format: Optional[str] = 'BGR',
         mask_format: Optional[str] = 'polygon',
         training: bool = True,
-        transforms: Optional[List[Union[T.Transform, T.TransformGen]]] = None,
         keypoint_hflip_indices: Optional[np.ndarray] = None,
     ) -> None:
         super(DictMapper, self).__init__(transforms, keypoint_hflip_indices)
 
+        if transforms is None:
+            raise ValueError('None transforms available')
         if mask_format not in ('polygon', 'bitmask'):
             raise ValueError('mask_format should be polygon or bitmask. Got {}'.format(mask_format))
 
         # TODO: better logic to handle RandomCrop
-        if transforms is not None:
-            for t in transforms[1:]:
-                if isinstance(t, T.RandomCrop):
-                    raise ValueError('RandomCrop can only be used as the first transform')
-            self.use_crop = isinstance(transforms[0], T.RandomCrop)
-        else:
-            self.use_crop = False
+        for t in transforms[1:]:
+            if isinstance(t, T.RandomCrop):
+                raise ValueError('RandomCrop can only be used as the first transform')
+        self.use_crop = isinstance(transforms[0], T.RandomCrop)
 
         self.image_format = image_format
         self.mask_format = mask_format
@@ -84,20 +83,19 @@ class DictMapper(DatasetMapper):
         image = utils.read_image(example['file_name'], self.image_format)
         utils.check_image_size(example, image)
 
-        if self.transforms is not None:
-            if 'annotations' in example and self.use_crop:
-                crop_tfm = utils.gen_crop_transform_with_instance(
-                    self.transforms[0], image, example['annotations']
-                )
-                image = crop_tfm.apply_image(image)
-                image, transforms = T.apply_transforms(self.transforms[1:], image)
-                transforms = crop_tfm + transforms
-            else:
-                image, transforms = T.apply_transforms(self.transforms, image)
+        if 'annotations' in example and self.use_crop:
+            crop_tfm = utils.gen_crop_transform_with_instance(
+                self.transforms[0], image, example['annotations']
+            )
+            image = crop_tfm.apply_image(image)
+            image, transforms = T.apply_transforms(self.transforms[1:], image)
+            transforms = crop_tfm + transforms
+        else:
+            image, transforms = T.apply_transforms(self.transforms, image)
 
         image_shape = image.shape[:2]
 
-        # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
+        # PyTorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.
         example['image'] = torch.as_tensor(np.ascontiguousarray(image.transpose((2, 0, 1))))
@@ -106,9 +104,6 @@ class DictMapper(DatasetMapper):
             # USER: Modify this if you want to keep them for some reason.
             example.pop('annotations', None)
             example.pop('sem_seg_file_name', None)
-            return example
-
-        if self.transforms is None:
             return example
 
         if 'annotations' in example:
@@ -135,6 +130,3 @@ class DictMapper(DatasetMapper):
             example['sem_seg'] = sem_seg_gt
 
         return example
-
-    def __repr__(self):
-        return self.transform_gens
