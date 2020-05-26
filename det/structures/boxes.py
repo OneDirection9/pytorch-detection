@@ -1,8 +1,4 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-#
-# Modified by: Zhipeng Han
-from __future__ import absolute_import, division, print_function
-
 import math
 from enum import IntEnum, unique
 from typing import Iterator, List, Tuple, Union
@@ -10,45 +6,53 @@ from typing import Iterator, List, Tuple, Union
 import numpy as np
 import torch
 
-__all__ = ['BoxMode', 'Boxes']
+__all__ = [
+    'BoxMode',
+    'Boxes',
+    'pairwise_iou',
+    'matched_boxlist_iou',
+]
 
 _RawBoxType = Union[List[float], Tuple[float, ...], torch.Tensor, np.ndarray]
 
 
 @unique
 class BoxMode(IntEnum):
-    """Enum of different ways to represent a box."""
     """
-    (x1, y1, x2, y2) in absolute floating points coordinates.
-    The coordinates in range [0, width or height].
+    Enum of different ways to represent a box.
     """
+
     XYXY_ABS = 0
     """
-    (x1, y1, w, h) in absolute floating points coordinates.
+    (x0, y0, x1, y1) in absolute floating points coordinates.
     The coordinates in range [0, width or height].
     """
     XYWH_ABS = 1
     """
-    (x1, y1, x2, y2) in range [0, 1]. They are relative to the size of the image.
+    (x0, y0, w, h) in absolute floating points coordinates.
     """
     XYXY_REL = 2
     """
-    (x1, y1, w, h) in range [0, 1]. They are relative to the size of the image.
+    Not yet supported!
+    (x0, y0, x1, y1) in range [0, 1]. They are relative to the size of the image.
     """
     XYWH_REL = 3
+    """
+    Not yet supported!
+    (x0, y0, w, h) in range [0, 1]. They are relative to the size of the image.
+    """
+    XYWHA_ABS = 4
     """
     (xc, yc, w, h, a) in absolute floating points coordinates.
     (xc, yc) is the center of the rotated box, and the angle a is in degrees ccw.
     """
-    XYWHA_ABS = 4
 
     @staticmethod
     def convert(box: _RawBoxType, from_mode: 'BoxMode', to_mode: 'BoxMode') -> _RawBoxType:
         """
         Args:
             box: can be a k-tuple, k-list or an Nxk array/tensor, where k = 4 or 5
-            from_mode: The current way to represent a box.
-            to_mode: The expected way to represent a box.
+            from_mode, to_mode (BoxMode)
 
         Returns:
             The converted box of the same type.
@@ -133,14 +137,16 @@ class BoxMode(IntEnum):
             return arr
 
 
-class Boxes(object):
-    """This structure stores a list of boxes as a Nx4 torch.Tensor.
-
-    It supports some common methods about boxes (`area`, `clip`, `nonempty`, etc), and also behaves
-    like a Tensor (support indexing, `to(device)`, `.device`, and iteration over all boxes)
+class Boxes:
+    """
+    This structure stores a list of boxes as a Nx4 torch.Tensor.
+    It supports some common methods about boxes
+    (`area`, `clip`, `nonempty`, etc),
+    and also behaves like a Tensor
+    (support indexing, `to(device)`, `.device`, and iteration over all boxes)
 
     Attributes:
-        tensor (torch.Tensor): Float matrix of Nx4. Each row is (x1, y1, x2, y2).
+        tensor (torch.Tensor): float matrix of Nx4. Each row is (x1, y1, x2, y2).
     """
 
     BoxSizeType = Union[List[int], Tuple[int, int]]
@@ -148,7 +154,7 @@ class Boxes(object):
     def __init__(self, tensor: torch.Tensor):
         """
         Args:
-            tensor: A Nx4 matrix. Each row is (x1, y1, x2, y2).
+            tensor (Tensor[float]): a Nx4 matrix.  Each row is (x1, y1, x2, y2).
         """
         device = tensor.device if isinstance(tensor, torch.Tensor) else torch.device('cpu')
         tensor = torch.as_tensor(tensor, dtype=torch.float32, device=device)
@@ -161,7 +167,8 @@ class Boxes(object):
         self.tensor = tensor
 
     def clone(self) -> 'Boxes':
-        """Clones the Boxes.
+        """
+        Clone the Boxes.
 
         Returns:
             Boxes
@@ -172,18 +179,20 @@ class Boxes(object):
         return Boxes(self.tensor.to(device))
 
     def area(self) -> torch.Tensor:
-        """Computes the area of all the boxes.
+        """
+        Computes the area of all the boxes.
 
         Returns:
-            torch.Tensor: A vector with areas of each box.
+            torch.Tensor: a vector with areas of each box.
         """
         box = self.tensor
         area = (box[:, 2] - box[:, 0]) * (box[:, 3] - box[:, 1])
         return area
 
     def clip(self, box_size: BoxSizeType) -> None:
-        """Clips (in place) the boxes by limiting x coordinates to the range [0, width] and y
-        coordinates to the range [0, height].
+        """
+        Clip (in place) the boxes by limiting x coordinates to the range [0, width]
+        and y coordinates to the range [0, height].
 
         Args:
             box_size (height, width): The clipping box's size.
@@ -196,13 +205,14 @@ class Boxes(object):
         self.tensor[:, 3].clamp_(min=0, max=h)
 
     def nonempty(self, threshold: float = 0.0) -> torch.Tensor:
-        """Finds boxes that are non-empty.
-
+        """
+        Find boxes that are non-empty.
         A box is considered empty, if either of its side is no larger than threshold.
 
         Returns:
-            Tensor: A binary vector which represents whether each box is empty (False) or non-empty
-                (True).
+            Tensor:
+                a binary vector which represents whether each box is empty
+                (False) or non-empty (True).
         """
         box = self.tensor
         widths = box[:, 2] - box[:, 0]
@@ -222,8 +232,8 @@ class Boxes(object):
         3. `new_boxes = boxes[vector]`, where vector is a torch.BoolTensor
            with `length = len(boxes)`. Nonzero elements in the vector will be selected.
 
-        Note that the returned Boxes might share storage with this Boxes, subject to Pytorch's
-        indexing semantics.
+        Note that the returned Boxes might share storage with this Boxes,
+        subject to Pytorch's indexing semantics.
         """
         if isinstance(item, int):
             return Boxes(self.tensor[item].view(1, -1))
@@ -241,11 +251,11 @@ class Boxes(object):
         """
         Args:
             box_size (height, width): Size of the reference box.
-            boundary_threshold: Boxes that extend beyond the reference box boundary by more than
-                boundary_threshold are considered "outside".
+            boundary_threshold (int): Boxes that extend beyond the reference box
+                boundary by more than boundary_threshold are considered "outside".
 
         Returns:
-            A binary vector, indicating whether each box is inside the reference box.
+            a binary vector, indicating whether each box is inside the reference box.
         """
         height, width = box_size
         inds_inside = (
@@ -264,19 +274,22 @@ class Boxes(object):
         return (self.tensor[:, :2] + self.tensor[:, 2:]) / 2
 
     def scale(self, scale_x: float, scale_y: float) -> None:
-        """Scales the box with horizontal and vertical scaling factors."""
+        """
+        Scale the box with horizontal and vertical scaling factors
+        """
         self.tensor[:, 0::2] *= scale_x
         self.tensor[:, 1::2] *= scale_y
 
     @classmethod
     def cat(cls, boxes_list: List['Boxes']) -> 'Boxes':
-        """Concatenates a list of Boxes into a single Boxes.
+        """
+        Concatenates a list of Boxes into a single Boxes
 
-        Args:
+        Arguments:
             boxes_list (list[Boxes])
 
         Returns:
-            Boxes: The concatenated Boxes
+            Boxes: the concatenated Boxes
         """
         assert isinstance(boxes_list, (list, tuple))
         if len(boxes_list) == 0:
@@ -346,9 +359,10 @@ def matched_boxlist_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
     Returns:
         (tensor) iou, sized [N].
     """
-    assert len(boxes1) == len(boxes2), (
-        'boxlists should have the same'
-        'number of entries, got {}, {}'.format(len(boxes1), len(boxes2))
+    assert len(boxes1) == len(
+        boxes2
+    ), 'boxlists should have the same' 'number of entries, got {}, {}'.format(
+        len(boxes1), len(boxes2)
     )
     area1 = boxes1.area()  # [N]
     area2 = boxes2.area()  # [N]

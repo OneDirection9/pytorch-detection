@@ -19,7 +19,6 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from foundation.registry import build
-from foundation.transforms import Transform
 from torch.utils.data import BatchSampler, DataLoader, Dataset
 
 from ..utils.comm import get_world_size
@@ -30,7 +29,7 @@ from .dataset_mapper import DatasetMapper, DatasetMapperRegistry
 from .datasets import MetadataRegistry, VisionDataset, VisionDatasetRegistry
 from .pipelines import Pipeline, PipelineRegistry
 from .samplers import InferenceSampler, SamplerRegistry
-from .transforms import TransformGen, TransformGenRegistry, TransformRegistry
+from .transforms import Transform, TransformGen, TransformGenRegistry, TransformRegistry
 
 __all__ = [
     'build_vision_datasets',
@@ -278,6 +277,8 @@ def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
         cfg: Config which loads from a .yaml file.
     """
     dataset = build_pytorch_dataset(cfg['data']['train'])
+    from ipdb import set_trace
+    set_trace()
 
     dl_cfg = cfg['dataloader']['train']
 

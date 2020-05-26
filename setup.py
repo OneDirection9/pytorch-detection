@@ -23,8 +23,8 @@ install_requires = [
     'pyyaml',
     'six',
     'opencv-python==4.1.0.25',
-    'torch>=1.4.0',
-    'torchvision>=0.5.0',
+    'torch>=1.5.0',
+    'torchvision>=0.6.0',
     'pycocotools',
 ]
 

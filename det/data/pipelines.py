@@ -170,7 +170,6 @@ class FormatConverter(Pipeline):
     """
 
     def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        h, w = example.get('height', None), example.get('width', None)
         annotations: List[Dict[str, Any]] = example['annotations']
         for ann in annotations:
             bbox = BoxMode.convert(ann['bbox'], ann['bbox_mode'], BoxMode.XYXY_ABS)
@@ -184,23 +183,10 @@ class FormatConverter(Pipeline):
                     ann['segmentation'] = [np.asarray(p).flatten().reshape(-1, 2) for p in segm]
                 elif isinstance(segm, dict):
                     if isinstance(segm['counts'], list):
-                        # uncompressed RLE
-                        mask = mask_util.decode(
-                            mask_util.frPyObjects(segm, segm['size'][0], segm['size'][1])
-                        )
-                    else:
-                        # RLE
-                        mask = mask_util.decode(segm)
-
-                    if h is not None and w is not None:
-                        image_hw = (h, w)
-                        segm_hw = tuple(mask.shape[:2])
-                        if not image_hw == segm_hw:
-                            raise ValueError(
-                                'Size mismatch between image and segmentation. '
-                                'Expect ({}), got ({}) in (H, W)'.format(image_hw, segm_hw)
-                            )
-                    ann['segmentation'] = mask
+                        # uncompressed RLE -> encoded RLE
+                        segm = mask_util.frPyObjects(segm, segm['size'][0], segm['size'][1])
+                    # encoded RLE -> binary masks
+                    ann['segmentation'] = mask_util.decode(segm)
                 else:
                     raise TypeError(
                         'Expected segmentation in polygons as List[List[float] or np.ndarray] or '
