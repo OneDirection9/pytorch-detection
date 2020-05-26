@@ -18,41 +18,40 @@ _RawBoxType = Union[List[float], Tuple[float, ...], torch.Tensor, np.ndarray]
 
 @unique
 class BoxMode(IntEnum):
-    """
-    Enum of different ways to represent a box.
-    """
+    """Enum of different ways to represent a box."""
 
     XYXY_ABS = 0
     """
-    (x0, y0, x1, y1) in absolute floating points coordinates.
+    (x1, y1, x2, y2) in absolute floating points coordinates.
     The coordinates in range [0, width or height].
     """
     XYWH_ABS = 1
     """
-    (x0, y0, w, h) in absolute floating points coordinates.
+    (x1, y1, w, h) in absolute floating points coordinates.
     """
     XYXY_REL = 2
     """
     Not yet supported!
-    (x0, y0, x1, y1) in range [0, 1]. They are relative to the size of the image.
+    (x1, y1, x2, y2) in range [0, 1]. They are relative to the size of the image.
     """
     XYWH_REL = 3
     """
     Not yet supported!
-    (x0, y0, w, h) in range [0, 1]. They are relative to the size of the image.
+    (x1, y1, w, h) in range [0, 1]. They are relative to the size of the image.
     """
     XYWHA_ABS = 4
     """
-    (xc, yc, w, h, a) in absolute floating points coordinates.
-    (xc, yc) is the center of the rotated box, and the angle a is in degrees ccw.
+    (ctr_x, ctr_y, w, h, a) in absolute floating points coordinates.
+    (ctr_x, ctr_y) is the center of the rotated box, and the angle a is in degrees ccw.
     """
 
     @staticmethod
     def convert(box: _RawBoxType, from_mode: 'BoxMode', to_mode: 'BoxMode') -> _RawBoxType:
         """
         Args:
-            box: can be a k-tuple, k-list or an Nxk array/tensor, where k = 4 or 5
-            from_mode, to_mode (BoxMode)
+            box: Can be a k-tuple, k-list or an Nxk array/tensor, where k = 4 or 5
+            from_mode:
+            to_mode:
 
         Returns:
             The converted box of the same type.
@@ -137,13 +136,11 @@ class BoxMode(IntEnum):
             return arr
 
 
-class Boxes:
-    """
-    This structure stores a list of boxes as a Nx4 torch.Tensor.
-    It supports some common methods about boxes
-    (`area`, `clip`, `nonempty`, etc),
-    and also behaves like a Tensor
-    (support indexing, `to(device)`, `.device`, and iteration over all boxes)
+class Boxes(object):
+    """This structure stores a list of boxes as a Nx4 torch.Tensor.
+
+    It supports some common methods about boxes (`area`, `clip`, `nonempty`, etc), and also behaves
+    like a Tensor (support indexing, `to(device)`, `.device`, and iteration over all boxes)
 
     Attributes:
         tensor (torch.Tensor): float matrix of Nx4. Each row is (x1, y1, x2, y2).
@@ -154,7 +151,7 @@ class Boxes:
     def __init__(self, tensor: torch.Tensor):
         """
         Args:
-            tensor (Tensor[float]): a Nx4 matrix.  Each row is (x1, y1, x2, y2).
+            tensor (Tensor[float]): a Nx4 matrix. Each row is (x1, y1, x2, y2).
         """
         device = tensor.device if isinstance(tensor, torch.Tensor) else torch.device('cpu')
         tensor = torch.as_tensor(tensor, dtype=torch.float32, device=device)
@@ -167,8 +164,7 @@ class Boxes:
         self.tensor = tensor
 
     def clone(self) -> 'Boxes':
-        """
-        Clone the Boxes.
+        """Clones the Boxes.
 
         Returns:
             Boxes
@@ -179,23 +175,21 @@ class Boxes:
         return Boxes(self.tensor.to(device))
 
     def area(self) -> torch.Tensor:
-        """
-        Computes the area of all the boxes.
+        """Computes the area of all the boxes.
 
         Returns:
-            torch.Tensor: a vector with areas of each box.
+            torch.Tensor: A vector with areas of each box.
         """
         box = self.tensor
         area = (box[:, 2] - box[:, 0]) * (box[:, 3] - box[:, 1])
         return area
 
     def clip(self, box_size: BoxSizeType) -> None:
-        """
-        Clip (in place) the boxes by limiting x coordinates to the range [0, width]
-        and y coordinates to the range [0, height].
+        """Clips (in place) the boxes by limiting x coordinates to the range [0, width] and y
+        coordinates to the range [0, height].
 
         Args:
-            box_size (height, width): The clipping box's size.
+            box_size: Height and width to clip box's size.
         """
         assert torch.isfinite(self.tensor).all(), 'Box tensor contains infinite or NaN!'
         h, w = box_size
@@ -205,8 +199,8 @@ class Boxes:
         self.tensor[:, 3].clamp_(min=0, max=h)
 
     def nonempty(self, threshold: float = 0.0) -> torch.Tensor:
-        """
-        Find boxes that are non-empty.
+        """Finds boxes that are non-empty.
+
         A box is considered empty, if either of its side is no larger than threshold.
 
         Returns:
@@ -251,8 +245,8 @@ class Boxes:
         """
         Args:
             box_size (height, width): Size of the reference box.
-            boundary_threshold (int): Boxes that extend beyond the reference box
-                boundary by more than boundary_threshold are considered "outside".
+            boundary_threshold: Boxes that extend beyond the reference box boundary by more than
+                boundary_threshold are considered "outside".
 
         Returns:
             a binary vector, indicating whether each box is inside the reference box.

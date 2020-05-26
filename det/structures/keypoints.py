@@ -8,7 +8,7 @@ from torch.nn.functional import interpolate
 __all__ = ['Keypoints', 'heatmaps_to_keypoints']
 
 
-class Keypoints:
+class Keypoints(object):
     """
     Stores keypoint annotation data. GT Instances have a `gt_keypoints` property
     containing the x,y location and visibility flag of each keypoint. This tensor has shape

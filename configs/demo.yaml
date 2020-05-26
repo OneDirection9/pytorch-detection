@@ -21,14 +21,26 @@ data:
     dataset_mapper:
       name: DictMapper
       transforms:
-        - name: RandomCrop
-          crop_type: absolute
-          crop_size: [600, 600]
-        - name: RandomHFlip
         - name: ResizeShortestEdge
-          short: 600
-          max_size: 1000
-          sample_style: range
+          short: 800
+          max_size: 1333
+          sample_style: choice
+        - name: RandomHFlip
+          prob: 0.5
+  test:
+    datasets:
+      - name: COCOInstance
+        json_file: ./data/MSCOCO/annotations/person_keypoints_val2017.json
+        image_root: ./data/MSCOCO/val2017/
+        metadata:
+          name: COCOPersonMetadata
+    dataset_mapper:
+      name: DictMapper
+      transforms:
+        - name: ResizeShortestEdge
+          short: 800
+          max_size: 1333
+          sample_style: choice
 
 dataloader:
   train:

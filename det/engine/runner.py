@@ -3,11 +3,12 @@ from __future__ import absolute_import, division, print_function
 import copy
 import logging
 import time
+from typing import Any, Dict
 
 import torch
-from foundation.backends.torch.engine import RunnerBase
+from foundation.engine import BaseRunner
 
-from ..data import build_test_loader, build_train_loader
+from ..data import build_pytorch_dataset, build_train_dataloader
 from ..models import build_model
 
 logger = logging.getLogger(__name__)
@@ -15,28 +16,21 @@ logger = logging.getLogger(__name__)
 __all__ = ['Runner']
 
 
-class Runner(RunnerBase):
+class Runner(BaseRunner):
 
-    def __init__(self, cfg):
+    def __init__(self, cfg: Dict[str, Any]):
         super(Runner, self).__init__()
 
         self._cfg = copy.deepcopy(cfg)
 
-        self._data_loader, self._epoch_length = self.build_train_loader(cfg)
-        self._data_loader_iter = iter(self._data_loader)
+        dataset = build_pytorch_dataset(cfg['data']['train'])
+        self._dataloader = build_train_dataloader(cfg, dataset)
+        self._dataloader_iter = iter(self._dataloader)
 
         self._model = self.build_model(cfg)
         self._model.train()
 
         self.build_hooks(cfg)
-
-    @classmethod
-    def build_train_loader(cls, cfg):
-        return build_train_loader(cfg['dataset']['train'], cfg['dataloader'])
-
-    @classmethod
-    def build_test_loader(cls, cfg):
-        return build_test_loader(cfg['dataset']['test'], cfg['dataloader'])
 
     @classmethod
     def build_model(cls, cfg):
@@ -59,7 +53,7 @@ class Runner(RunnerBase):
         """
         If your want to do something with the data, you can wrap the dataloader.
         """
-        data = next(self._data_loader_iter)
+        data = next(self._dataloader_iter)
         data_time = time.perf_counter() - start
         print(data_time)
 

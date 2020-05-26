@@ -7,7 +7,7 @@ import torch
 __all__ = ['Instances']
 
 
-class Instances:
+class Instances(object):
     """
     This class represents a list of instances in an image.
     It stores the attributes of instances (e.g., boxes, masks, labels, scores) as "fields".

@@ -277,8 +277,6 @@ def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
         cfg: Config which loads from a .yaml file.
     """
     dataset = build_pytorch_dataset(cfg['data']['train'])
-    from ipdb import set_trace
-    set_trace()
 
     dl_cfg = cfg['dataloader']['train']
 
