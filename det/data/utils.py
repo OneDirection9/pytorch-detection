@@ -4,7 +4,7 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -188,7 +188,7 @@ def create_keypoint_hflip_indices(vision_datasets: List[VisionDataset]) -> np.nd
 
 def transform_instance_annotations(
     annotation: Dict[str, Any],
-    transforms: T.TransformList,
+    transforms: Union[T.Transform, T.TransformList],
     image_size: Tuple[int, int],
     *,
     keypoint_hflip_indices: Optional[np.ndarray] = None
@@ -197,7 +197,6 @@ def transform_instance_annotations(
 
     It will use :meth:`transforms.apply_box` for the box, :meth:`transforms.apply_segmentation` for
     segmentation RLE, and :meth:`transforms.apply_coords` for segmentation polygons & keypoints.
-
 
     Args:
         annotation: Dictionary of instance annotations for a single instance. It will be modified
@@ -244,8 +243,12 @@ def transform_instance_annotations(
         keypoints = np.asarray(annotation['keypoints'], dtype='float64').reshape(-1, 3)
         keypoints[:, :2] = transforms.apply_coords(keypoints[:, :2])
 
-        # This assumes that HFlipTransform is the only one taht does flip
-        do_hflip = sum(isinstance(t, T.HFlipTransform) for t in transforms.transforms) % 2 == 1
+        # This assumes that HFlipTransform is the only one that does flip
+        if isinstance(transforms, T.TransformList):
+            do_hflip = sum(isinstance(t, T.HFlipTransform) for t in transforms.transforms) % 2 == 1
+        else:
+            do_hflip = isinstance(transforms, T.HFlipTransform)
+
         if do_hflip:
             assert keypoint_hflip_indices is not None
             keypoints = keypoints[keypoint_hflip_indices, :]

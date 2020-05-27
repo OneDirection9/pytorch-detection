@@ -3,9 +3,7 @@
 # Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
-import inspect
-from abc import ABCMeta, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 import pycocotools.mask as mask_util
@@ -15,8 +13,7 @@ from ..structures import BoxMode
 
 __all__ = [
     'PipelineRegistry',
-    'Pipeline',
-    'Compose',
+    'PipelineList',
     'CrowdFilter',
     'FewKeypointsFilter',
     'FormatConverter',
@@ -25,70 +22,39 @@ __all__ = [
 
 
 class PipelineRegistry(Registry):
-    """Registry of pipelines."""
-    pass
+    """Registry of pipelines.
 
-
-class Pipeline(object, metaclass=ABCMeta):
-    """Base pipeline class.
-
-    A pipeline takes a single example produced by the :class:`VisionDataset` as input and returns
-    processed example or None. When returning None, the example should be ignored.
+    A pipeline, which can be either a function or an object implementing :meth:`__call__`, that
+    takes a single example produced by the :class:`VisionDataset` as input and returns processed
+    example or None. When returning None, the example should be ignored.
 
     Typical pipeline use cases are filtering out invalid annotations, converting loaded examples to
     the format accepted by downstream modules, and so on, which are only need to do once during the
     whole workflow.
 
     Notes:
-        Don't do memory heavy work in pipelines, such as loading images. Because the examples
-        returned by pipelines should be passed to :class:`DatasetFromList` to get a PyTorch format
-        class. If loaded images, the memory cost is expensive.
+        Don't do memory heavy work in pipelines, such as loading images. If so, the memory cost is
+        expensive. Because the examples returning by pipelines are usually passed to
+        :class:`DatasetFromList` to get a PyTorch format class.
+    """
+    pass
+
+
+class PipelineList(object):
+    """Maintains a list of pipelines which will be applied in sequence.
+
+    Attributes:
+        pipelines (list[Pipeline]):
     """
 
-    def __init__(self) -> None:
-        """Rewrites it to avoid raise AssertionError in :meth:`__repr__` due to *args, **kwargs."""
-        pass
-
-    @abstractmethod
-    def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        pass
-
-    def __repr__(self) -> str:
-        """Produces something like:
-        MyPipeline(field1={self.field1}, field2={self.field2})
-        """
-        try:
-            sig = inspect.signature(self.__init__)
-            items = []
-            for name, param in sig.parameters.items():
-                assert (
-                    param.kind != param.VAR_POSITIONAL and param.kind != param.VAR_KEYWORD
-                ), "The default __repr__ doesn't support *args or **kwargs"
-
-                assert hasattr(self, name), (
-                    'Attribute {} not found! '
-                    'Default __repr__ only works if attributes match the constructor.'.format(name)
-                )
-                attr = getattr(self, name)
-                items.append('{}={!r}'.format(name, attr))
-            return '{}({})'.format(self.__class__.__name__, ', '.join(items))
-        except AssertionError:
-            return super().__repr__()
-
-    __str__ = __repr__
-
-
-class Compose(object):
-    """A class that composes several pipelines together."""
-
-    def __init__(self, pipelines: List[Pipeline]) -> None:
+    def __init__(self, pipelines: List[Callable]) -> None:
         """
         Args:
             pipelines: List of pipelines which are executed one by one.
         """
         for ppl in pipelines:
-            if not isinstance(ppl, Pipeline):
-                raise TypeError('Expected Pipeline. Got {}'.format(type(ppl)))
+            if not isinstance(ppl, Callable):
+                raise TypeError('Expected a callable object. Got {}'.format(type(ppl)))
 
         self.pipelines = pipelines
 
@@ -111,7 +77,7 @@ class Compose(object):
 
 
 @PipelineRegistry.register('CrowdFilter')
-class CrowdFilter(Pipeline):
+class CrowdFilter(object):
     """Filtering out crowd annotations.
 
     Returns None if none annotations or images with only crowd annotations.
@@ -130,9 +96,12 @@ class CrowdFilter(Pipeline):
             example['annotations'] = res
             return example
 
+    def __repr__(self):
+        return self.__class__.__name__ + '()'
+
 
 @PipelineRegistry.register('FewKeypointsFilter')
-class FewKeypointsFilter(Pipeline):
+class FewKeypointsFilter(object):
     """Filtering out images with too few number of keypoints."""
 
     def __init__(self, min_keypoints_per_image: int) -> None:
@@ -158,9 +127,14 @@ class FewKeypointsFilter(Pipeline):
         else:
             return example
 
+    def __repr__(self):
+        return self.__class__.__name__ + '(min_keypoints_per_image={0})'.format(
+            self.min_keypoints_per_image
+        )
+
 
 @PipelineRegistry.register('FormatConverter')
-class FormatConverter(Pipeline):
+class FormatConverter(object):
     """Converting annotations to the format acceptable by :class:`Transform` inplace.
 
     This class do following converts:
@@ -198,9 +172,12 @@ class FormatConverter(Pipeline):
 
         return example
 
+    def __repr__(self):
+        return self.__class__.__name__ + '()'
+
 
 @PipelineRegistry.register('AnnotationPopup')
-class AnnotationPopup(Pipeline):
+class AnnotationPopup(object):
     """Popping up unused annotations."""
 
     def __init__(self, mask_on: bool = False, keypoint_on: bool = False) -> None:
@@ -222,3 +199,8 @@ class AnnotationPopup(Pipeline):
             if not self.keypoint_on:
                 ann.pop('keypoints', None)
         return example
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(mask_on={0}, keypoint_on={1})'.format(
+            self.mask_on, self.keypoint_on
+        )

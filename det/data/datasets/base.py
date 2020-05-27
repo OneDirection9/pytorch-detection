@@ -11,7 +11,7 @@ __all__ = ['VisionDatasetRegistry', 'VisionDataset']
 
 
 class VisionDatasetRegistry(Registry):
-    """Registry of vision datasets."""
+    """Registry of VisionDataset."""
     pass
 
 

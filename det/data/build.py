@@ -12,6 +12,7 @@ The workflow of data is:
 """
 from __future__ import absolute_import, division, print_function
 
+import copy
 import itertools
 import logging
 import operator
@@ -25,7 +26,7 @@ from ..utils.comm import get_world_size
 from ..utils.env import seed_all_rng
 from . import utils
 from .common import AspectRatioGroupedDataset, DatasetFromList, MapDataset
-from .dataset_mapper import DatasetMapper, DatasetMapperRegistry
+from .dataset_mapper import C, DatasetMapper, DatasetMapperRegistry
 from .datasets import MetadataRegistry, VisionDataset, VisionDatasetRegistry
 from .pipelines import Pipeline, PipelineRegistry
 from .samplers import InferenceSampler, SamplerRegistry
@@ -271,13 +272,47 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
     return dataset
 
 
+def build_train_dataloader2(cfg):
+    cfg = copy.deepcopy(cfg)
+    data_cfg = cfg['data']['train']
+    vision_datasets = build_vision_datasets(data_cfg['datasets'])
+    if 'pipelines' in data_cfg:
+        pipelines = build_pipelines(data_cfg['pipelines'])
+    else:
+        pipelines = None
+    examples = get_dataset_examples(vision_datasets, pipelines)
+
+    # Check metadata across multiple datasets
+    has_instances = 'annotations' in examples[0]
+    if has_instances:
+        try:
+            utils.check_metadata_consistency('thing_classes', vision_datasets)
+            # TODO: add print_instances_class_histogram
+        except AttributeError:  # class names are not available for this dataset
+            pass
+
+    dataset = DatasetFromList(examples, copy=False, serialization=True)
+
+    if 'mapper' in data_cfg:
+        kh = utils.create_keypoint_hflip_indices(vision_datasets)
+        mappers = []
+        for c in data_cfg['mapper']:
+            if c['name'] == 'RH':
+                c['kh'] = kh
+            mappers.append(build(DatasetMapperRegistry, c))
+        dataset = MapDataset(dataset, C(mappers))
+    return dataset
+
+
 def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
     """Builds training dataloader from all config.
 
     Args:
         cfg: Config which loads from a .yaml file.
     """
+    cfg = copy.deepcopy(cfg)
     dataset = build_pytorch_dataset(cfg['data']['train'])
+    return dataset
 
     dl_cfg = cfg['dataloader']['train']
 

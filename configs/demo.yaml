@@ -27,6 +27,10 @@ data:
           sample_style: choice
         - name: RandomHFlip
           prob: 0.5
+    mapper:
+      - name: ImageLoader
+      - name: Resize
+      - name: RH
   test:
     datasets:
       - name: COCOInstance
