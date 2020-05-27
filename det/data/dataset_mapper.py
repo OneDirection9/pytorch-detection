@@ -49,6 +49,78 @@ class DatasetMapper(object, metaclass=ABCMeta):
         pass
 
 
+@DatasetMapperRegistry.register('ImageLoader')
+class ImageLoader(object):
+
+    def __init__(self, image_format='BGR'):
+        self.image_format = image_format
+
+    def __call__(self, example: Dict[str, Any]) -> Dict[str, Any]:
+        image = utils.read_image(example['file_name'], self.image_format)
+        utils.check_image_size(example, image)
+        example['image'] = image
+        return example
+
+
+@DatasetMapperRegistry.register('Resize')
+class Resize(object):
+
+    def __init__(self, short=800, max_size=1333, sample_style='choice'):
+        self.tfm_gen = T.ResizeShortestEdge(short, max_size, sample_style)
+
+    def __call__(self, example: Dict[str, Any]) -> Dict[str, Any]:
+        image = example['image']
+        tfm = self.tfm_gen.get_transform(image)
+        image = tfm.apply_image(image)
+        image_shape = image.shape[:2]
+
+        if 'annotations' in example:
+            example['annotations'] = [
+                utils.transform_instance_annotations(obj, tfm, image_shape)
+                for obj in example['annotations'] if obj.get('iscrowd', 0) == 0
+            ]
+        return example
+
+
+@DatasetMapperRegistry.register('RH')
+class RH(object):
+
+    def __init__(self, prob=0.5, kh=None):
+        self.tfm_gen = T.RandomHFlip(prob)
+        self.kh = kh
+
+    def __call__(self, example: Dict[str, Any]) -> Dict[str, Any]:
+        image = example['image']
+        tfm = self.tfm_gen.get_transform(image)
+        image = tfm.apply_image(image)
+        image_shape = image.shape[:2]
+
+        if 'annotations' in example:
+            anns = [
+                utils.transform_instance_annotations(
+                    obj, tfm, image_shape, keypoint_hflip_indices=self.kh
+                ) for obj in example['annotations'] if obj.get('iscrowd', 0) == 0
+            ]
+            instances = utils.annotations_to_instances(anns, image_shape, mask_format='polygon')
+            example['instances'] = utils.filter_empty_instances(instances)
+
+        example['image'] = torch.as_tensor(np.ascontiguousarray(image.transpose((2, 0, 1))))
+        return example
+
+
+class C(object):
+
+    def __init__(self, mappers):
+        self.mappers = mappers
+
+    def __call__(self, example):
+        for mapper in self.mappers:
+            example = mapper(example)
+            if example is None:
+                return None
+        return example
+
+
 @DatasetMapperRegistry.register('DictMapper')
 class DictMapper(DatasetMapper):
     """Reading images and transforming it alongside with annotations."""

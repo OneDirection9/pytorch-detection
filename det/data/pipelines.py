@@ -40,6 +40,9 @@ class PipelineRegistry(Registry):
     pass
 
 
+Pipeline = Callable
+
+
 class PipelineList(object):
     """Maintains a list of pipelines which will be applied in sequence.
 
@@ -47,13 +50,13 @@ class PipelineList(object):
         pipelines (list[Pipeline]):
     """
 
-    def __init__(self, pipelines: List[Callable]) -> None:
+    def __init__(self, pipelines: List[Pipeline]) -> None:
         """
         Args:
             pipelines: List of pipelines which are executed one by one.
         """
         for ppl in pipelines:
-            if not isinstance(ppl, Callable):
+            if not isinstance(ppl, Pipeline):
                 raise TypeError('Expected a callable object. Got {}'.format(type(ppl)))
 
         self.pipelines = pipelines
@@ -104,14 +107,12 @@ class CrowdFilter(object):
 class FewKeypointsFilter(object):
     """Filtering out images with too few number of keypoints."""
 
-    def __init__(self, min_keypoints_per_image: int) -> None:
+    def __init__(self, min_keypoints_per_image: int = 0) -> None:
         """
         Args:
             min_keypoints_per_image: The image with visible keypoints less than
                 `min_keypoints_per_image` will be filtered out.
         """
-        super(FewKeypointsFilter, self).__init__()
-
         self.min_keypoints_per_image = min_keypoints_per_image
 
     def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -186,8 +187,6 @@ class AnnotationPopup(object):
             mask_on: If False, remove segmentation annotations.
             keypoint_on: If False, remove keypoints annotations.
         """
-        super(AnnotationPopup, self).__init__()
-
         self.mask_on = mask_on
         self.keypoint_on = keypoint_on
 

@@ -16,7 +16,7 @@ import copy
 import itertools
 import logging
 import operator
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
 from foundation.registry import build
@@ -28,7 +28,7 @@ from . import utils
 from .common import AspectRatioGroupedDataset, DatasetFromList, MapDataset
 from .dataset_mapper import C, DatasetMapper, DatasetMapperRegistry
 from .datasets import MetadataRegistry, VisionDataset, VisionDatasetRegistry
-from .pipelines import Pipeline, PipelineRegistry
+from .pipelines import PipelineRegistry
 from .samplers import InferenceSampler, SamplerRegistry
 from .transforms import Transform, TransformGen, TransformGenRegistry, TransformRegistry
 
@@ -80,7 +80,7 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
     return vision_datasets
 
 
-def build_pipelines(ppl_cfg: _CfgType) -> List[Pipeline]:
+def build_pipelines(ppl_cfg: _CfgType) -> List[Callable]:
     """Builds pipelines from config.
 
     Args:
@@ -176,7 +176,7 @@ def build_dataset_mapper(
 
 def get_dataset_examples(
     datasets: List[VisionDataset],
-    pipelines: Optional[List[Pipeline]] = None,
+    pipelines: Optional[List[Callable]] = None,
 ) -> List[Dict[str, Any]]:
     """Gets dataset examples.
 
