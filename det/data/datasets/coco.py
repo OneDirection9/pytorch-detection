@@ -13,7 +13,8 @@ from foundation.utils import Timer
 from pycocotools.coco import COCO
 
 from ...structures import BoxMode
-from .base import Metadata, VisionDataset, VisionDatasetRegistry
+from .base import VisionDataset, VisionDatasetRegistry
+from .metadata import Metadata
 
 __all__ = ['COCOInstance']
 
