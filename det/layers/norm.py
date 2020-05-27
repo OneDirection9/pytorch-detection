@@ -1,6 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
-from typing import Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -52,7 +52,7 @@ class FrozenBatchNorm2d(nn.Module):
                 eps=self.eps,
             )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '{}(num_features={}, eps={})'.format(
             self.__class__.__name__, self.num_features, self.eps
         )
@@ -91,16 +91,20 @@ class FrozenBatchNorm2d(nn.Module):
         return res
 
 
-def get_norm(norm: Union[str, nn.Module], out_channels: int) -> nn.Module:
+def get_norm(norm: Union[str, nn.Module], out_channels: int) -> Optional[nn.Module]:
     """
     Args:
-        norm:
+        norm: Either one of BN, SyncBN, FrozenBN, GN; or a callable that takes a channel number and
+            returns the normalization layer as a nn.Module.
         out_channels:
 
     Returns:
-        The normalization layer.
+        nn.Module or None: The normalization layer
     """
     if isinstance(norm, str):
+        if len(norm) == 0:
+            return None
+
         norm = {
             'BN': nn.BatchNorm2d,
             # FIXME: In PyTorch<=1.5, `nn.SyncBatchNorm` has incorrect gradient when the batch size

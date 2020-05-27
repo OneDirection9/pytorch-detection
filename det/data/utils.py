@@ -201,7 +201,7 @@ def transform_instance_annotations(
 
     Args:
         annotation: Dictionary of instance annotations for a single instance. It will be modified
-            in-palce.
+            in-place.
         transforms: :class:`TransformList`.
         image_size: The height and width of the transformed image
         keypoint_hflip_indices: see :func:`create_keypoint_hflip_indices`.

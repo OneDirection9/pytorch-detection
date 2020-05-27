@@ -22,7 +22,8 @@ class SamplerRegistry(Registry):
 
 @SamplerRegistry.register('TrainingSampler')
 class TrainingSampler(Sampler):
-    """
+    """Producing an infinite stream of indices.
+
     In training, we only care about the "infinite stream" of training data. So this sampler produces
     an infinite stream of indices and all workers cooperate to correctly shuffle the indices and
     sample different indices.

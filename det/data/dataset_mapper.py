@@ -51,6 +51,7 @@ class DatasetMapper(object, metaclass=ABCMeta):
 
 @DatasetMapperRegistry.register('DictMapper')
 class DictMapper(DatasetMapper):
+    """Reading images and transforming it alongside with annotations."""
 
     def __init__(
         self,
