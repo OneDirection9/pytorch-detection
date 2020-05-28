@@ -148,9 +148,8 @@ class ImageLoader(object):
         example['image'] = image
 
         if 'sem_seg_file_name' in example:
-            example['sem_seg'] = np.asarray(
-                Image.open(example['sem_seg_file_name'], 'rb'), dtype='uint8'
-            )
+            example['sem_seg'] = np.asarray(Image.open(example['sem_seg_file_name']), dtype='uint8')
+
         return example
 
     def __repr__(self) -> str:
