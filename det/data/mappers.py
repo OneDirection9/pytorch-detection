@@ -32,8 +32,8 @@ __all__ = [
 class MapperRegistry(Registry):
     """Registry of mappers.
 
-    Similar to pipeline, a mapper is also used to process a single example. But the mappers are
-    on-the-fly and may with randomness.
+    Similar to pipeline, a mapper is used to process a single example on-the-fly and may with
+    randomness.
     """
     pass
 
