@@ -25,6 +25,7 @@ __all__ = [
     'MapperList',
     'ImageLoader',
     'ToInstances',
+    'TransformApply',
 ]
 
 
