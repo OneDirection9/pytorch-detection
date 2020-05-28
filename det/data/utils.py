@@ -4,9 +4,10 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
-from typing import List
+from typing import List, Union
 
 import numpy as np
+import torch
 
 from .datasets import VisionDataset
 
@@ -16,6 +17,14 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+def convert_image_to_rgb(image: Union[torch.Tensor, np.ndarray], image_format: str) -> np.ndarray:
+    if isinstance(image, torch.Tensor):
+        # CxHxW -> HxWxC
+        image = image.cpu().numpy().transpose(1, 2, 0)
+
+    return image
 
 
 def check_metadata_consistency(name: str, vision_datasets: List[VisionDataset]) -> None:

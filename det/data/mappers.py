@@ -141,7 +141,7 @@ class ImageLoader(object):
         if 'height' not in example:
             example['height'] = h
 
-    def __call__(self, example: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def __call__(self, example: Dict[str, Any]) -> Dict[str, Any]:
         image = self.read_image(example['file_name'], self.image_format)
         self.check_image_size(example, image)
         example['image'] = image
