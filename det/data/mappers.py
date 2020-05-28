@@ -1,6 +1,5 @@
 from __future__ import absolute_import, division, print_function
 
-import functools
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import numpy as np
@@ -480,7 +479,5 @@ class TransformApply(object):
         return 'Apply(transform={0})'.format(self.transform)
 
 
-MapperRegistry.register('ResizeShortestEdge')(
-    functools.partial(TransformApply, T.ResizeShortestEdge)
-)
-MapperRegistry.register('RandomHFlip')(functools.partial(TransformApply, T.RandomHFlip))
+MapperRegistry.register_partial('ResizeShortestEdge', TransformApply, T.ResizeShortestEdge)
+MapperRegistry.register_partial('RandomHFlip', TransformApply, T.RandomHFlip)

@@ -4,7 +4,6 @@
 from __future__ import absolute_import, division, print_function
 
 import contextlib
-import functools
 import io
 import logging
 import os.path as osp
@@ -194,12 +193,12 @@ class COCODataset(VisionDataset):
 
 
 # Preset metadata
-VisionDatasetRegistry.register('COCOInstance')(
-    functools.partial(COCODataset, metadata=get_coco_instance_metadata())
+VisionDatasetRegistry.register_partial(
+    'COCOInstance', COCODataset, metadata=get_coco_instance_metadata()
 )
-VisionDatasetRegistry.register('COCOPanoptic')(
-    functools.partial(COCODataset, metadata=get_coco_panoptic_metadata())
+VisionDatasetRegistry.register_partial(
+    'COCOPanoptic', COCODataset, metadata=get_coco_panoptic_metadata()
 )
-VisionDatasetRegistry.register('COCOPerson')(
-    functools.partial(COCODataset, metadata=get_coco_person_metadata())
+VisionDatasetRegistry.register_partial(
+    'COCOPerson', COCODataset, metadata=get_coco_person_metadata()
 )
