@@ -8,10 +8,7 @@ import logging
 import types
 from typing import Any, Dict
 
-from foundation.registry import Registry
-
 __all__ = [
-    'MetadataRegistry',
     'Metadata',
     'get_coco_instance_metadata',
     'get_coco_panoptic_metadata',
@@ -20,11 +17,6 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
-
-
-class MetadataRegistry(Registry):
-    """Registry of metadata."""
-    pass
 
 
 class Metadata(types.SimpleNamespace):
@@ -296,7 +288,6 @@ CITYSCAPES_STUFF_CLASSES = [
 # yapf: enable
 
 
-@MetadataRegistry.register('COCOInstanceMetadata')
 def get_coco_instance_metadata() -> Metadata:
     """Returns metadata of the instance dataset."""
     thing_ids = [k['id'] for k in COCO_CATEGORIES if k['isthing'] == 1]
@@ -318,7 +309,6 @@ def get_coco_instance_metadata() -> Metadata:
     return m
 
 
-@MetadataRegistry.register('COCOPanopticMetadata')
 def get_coco_panoptic_metadata() -> Metadata:
     """Returns metadata for "separated" version of the panoptic segmentation dataset."""
     stuff_ids = [k['id'] for k in COCO_CATEGORIES if k['isthing'] == 0]
@@ -354,7 +344,6 @@ def get_coco_panoptic_metadata() -> Metadata:
     return m
 
 
-@MetadataRegistry.register('COCOPersonMetadata')
 def get_coco_person_metadata() -> Metadata:
     """Returns metadata of the keypoint dataset."""
     m = Metadata()
@@ -370,7 +359,6 @@ def get_coco_person_metadata() -> Metadata:
     return m
 
 
-@MetadataRegistry.register('Cityscapes')
 def get_cityscapes_metadata() -> Metadata:
     m = Metadata()
     m.set(**dict(

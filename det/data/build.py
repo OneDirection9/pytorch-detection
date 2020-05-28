@@ -26,7 +26,7 @@ from ..utils.comm import get_world_size
 from ..utils.env import seed_all_rng
 from . import utils
 from .common import AspectRatioGroupedDataset, DatasetFromList, MapDataset
-from .datasets import MetadataRegistry, VisionDataset, VisionDatasetRegistry
+from .datasets import VisionDataset, VisionDatasetRegistry
 from .mappers import MapperList, MapperRegistry
 from .pipelines import Pipeline, PipelineRegistry
 from .samplers import InferenceSampler, SamplerRegistry
@@ -68,9 +68,9 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
         raise ValueError('None vision dataset is available')
 
     # Build metadata
-    for cfg in ds_cfg:
-        if 'metadata' in cfg:
-            cfg['metadata'] = build(MetadataRegistry, cfg['metadata'])
+    # for cfg in ds_cfg:
+    #     if 'metadata' in cfg:
+    #         cfg['metadata'] = build(MetadataRegistry, cfg['metadata'])
 
     # Build vision datasets
     vision_datasets = [build(VisionDatasetRegistry, cfg) for cfg in ds_cfg]

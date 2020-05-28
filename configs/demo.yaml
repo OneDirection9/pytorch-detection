@@ -4,13 +4,9 @@ data:
 #      - name: COCOInstance
 #        json_file: ./data/MSCOCO/annotations/instances_train2017.json
 #        image_root: ./data/MSCOCO/train2017/
-#        metadata:
-#          name: COCOInstanceMetadata
-      - name: COCOInstance
+      - name: COCOPerson
         json_file: ./data/MSCOCO/annotations/person_keypoints_train2017.json
         image_root: ./data/MSCOCO/train2017/
-        metadata:
-          name: COCOPersonMetadata
     pipelines:
       - name: CrowdFilter
       - name: FewKeypointsFilter

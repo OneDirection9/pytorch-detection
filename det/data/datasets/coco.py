@@ -4,6 +4,7 @@
 from __future__ import absolute_import, division, print_function
 
 import contextlib
+import functools
 import io
 import logging
 import os.path as osp
@@ -14,15 +15,20 @@ from pycocotools.coco import COCO
 
 from ...structures import BoxMode
 from .base import VisionDataset, VisionDatasetRegistry
-from .metadata import Metadata
+from .metadata import (
+    Metadata,
+    get_coco_instance_metadata,
+    get_coco_panoptic_metadata,
+    get_coco_person_metadata,
+)
 
-__all__ = ['COCOInstance']
+__all__ = ['COCODataset']
 
 logger = logging.getLogger(__name__)
 
 
-@VisionDatasetRegistry.register('COCOInstance')
-class COCOInstance(VisionDataset):
+@VisionDatasetRegistry.register('COCODataset')
+class COCODataset(VisionDataset):
     """COCO instance dataset supporting object detection task and keypoint detection task.
 
     Loads a json file with COCO's instances annotation format. Currently supports instance
@@ -48,7 +54,7 @@ class COCOInstance(VisionDataset):
             metadata: If provided, it should be consistent with the information in json file.
                 Otherwise, information in this json file will be loaded.
         """
-        super(COCOInstance, self).__init__(metadata)
+        super(COCODataset, self).__init__(metadata)
 
         self.image_root = image_root
         self.json_file = json_file
@@ -185,3 +191,15 @@ class COCOInstance(VisionDataset):
                 .format(num_instances_without_valid_segmentation)
             )
         return dataset_dicts
+
+
+# Preset metadata
+VisionDatasetRegistry.register('COCOInstance')(
+    functools.partial(COCODataset, metadata=get_coco_instance_metadata())
+)
+VisionDatasetRegistry.register('COCOPanoptic')(
+    functools.partial(COCODataset, metadata=get_coco_panoptic_metadata())
+)
+VisionDatasetRegistry.register('COCOPerson')(
+    functools.partial(COCODataset, metadata=get_coco_person_metadata())
+)
