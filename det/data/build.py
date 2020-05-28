@@ -67,11 +67,6 @@ def build_vision_datasets(ds_cfg: _CfgType) -> List[VisionDataset]:
     if len(ds_cfg) == 0:
         raise ValueError('None vision dataset is available')
 
-    # Build metadata
-    # for cfg in ds_cfg:
-    #     if 'metadata' in cfg:
-    #         cfg['metadata'] = build(MetadataRegistry, cfg['metadata'])
-
     # Build vision datasets
     vision_datasets = [build(VisionDatasetRegistry, cfg) for cfg in ds_cfg]
     return vision_datasets
