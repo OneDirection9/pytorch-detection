@@ -9,7 +9,6 @@ from abc import ABCMeta, abstractmethod
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
-from foundation.registry import Registry
 from foundation.transforms import (
     BlendTransform,
     CropTransform,
@@ -23,7 +22,6 @@ from foundation.transforms import (
 from .transform import ExtentTransform, RotationTransform
 
 __all__ = [
-    'TransformGenRegistry',
     'TransformGen',
     'RandomApply',
     'RandomHFlip',
@@ -38,11 +36,6 @@ __all__ = [
     'RandomRotation',
     'RandomExtent',
 ]
-
-
-class TransformGenRegistry(Registry):
-    """Registry of transform generators."""
-    pass
 
 
 class TransformGen(object, metaclass=ABCMeta):
@@ -113,7 +106,6 @@ class TransformGen(object, metaclass=ABCMeta):
     __str__ = __repr__
 
 
-@TransformGenRegistry.register('RandomApply')
 class RandomApply(TransformGen):
     """Applying the wrapper transformation with a given probability randomly."""
 
@@ -148,7 +140,6 @@ class RandomApply(TransformGen):
             return NoOpTransform()
 
 
-@TransformGenRegistry.register('RandomHFlip')
 class RandomHFlip(TransformGen):
     """Flipping the image horizontally with the given probability."""
 
@@ -173,7 +164,6 @@ class RandomHFlip(TransformGen):
             return NoOpTransform()
 
 
-@TransformGenRegistry.register('RandomVFlip')
 class RandomVFlip(TransformGen):
     """Flipping the image vertically with the given probability."""
 
@@ -198,7 +188,6 @@ class RandomVFlip(TransformGen):
             return NoOpTransform()
 
 
-@TransformGenRegistry.register('Resize')
 class Resize(TransformGen):
     """Resizing image to a target size."""
 
@@ -221,7 +210,6 @@ class Resize(TransformGen):
         )
 
 
-@TransformGenRegistry.register('ResizeShortestEdge')
 class ResizeShortestEdge(TransformGen):
     """Scaling the shorter edge to the given size, with a limit of `max_size` on the longer edge.
 
@@ -279,7 +267,6 @@ class ResizeShortestEdge(TransformGen):
         return ResizeTransform(h, w, new_h, new_w, interp=self.interp)
 
 
-@TransformGenRegistry.register('RandomCrop')
 class RandomCrop(TransformGen):
     """Cropping a sub-image out of an image randomly."""
 
@@ -342,7 +329,6 @@ class RandomCrop(TransformGen):
             raise NotImplementedError('Unknown crop type {}'.format(self.crop_type))
 
 
-@TransformGenRegistry.register('RandomContrast')
 class RandomContrast(TransformGen):
     """Transforming image contrast randomly.
 
@@ -370,7 +356,6 @@ class RandomContrast(TransformGen):
         return BlendTransform(src_image=image.mean(), src_weight=1 - w, dst_weight=w)
 
 
-@TransformGenRegistry.register('RandomBrightness')
 class RandomBrightness(TransformGen):
     """Transforming image brightness randomly.
 
@@ -398,7 +383,6 @@ class RandomBrightness(TransformGen):
         return BlendTransform(src_image=0, src_weight=1 - w, dst_weight=w)
 
 
-@TransformGenRegistry.register('RandomSaturation')
 class RandomSaturation(TransformGen):
     """Transforming image saturation randomly.
 
@@ -429,7 +413,6 @@ class RandomSaturation(TransformGen):
         return BlendTransform(src_image=grayscale, src_weight=1 - w, dst_weight=w)
 
 
-@TransformGenRegistry.register('RandomLighting')
 class RandomLighting(TransformGen):
     """Transforming image color using fixed PCA over ImageNet randomly.
 
@@ -461,7 +444,6 @@ class RandomLighting(TransformGen):
         )
 
 
-@TransformGenRegistry.register('RandomRotation')
 class RandomRotation(TransformGen):
     """Rotating the image a few random degrees counter clockwise around the given center."""
 
@@ -526,7 +508,6 @@ class RandomRotation(TransformGen):
         return RotationTransform(h, w, angle, expand=self.expand, center=center, interp=self.interp)
 
 
-@TransformGenRegistry.register('RandomExtent')
 class RandomExtent(TransformGen):
     """Cropping a random 'subrect' of the source image.
 

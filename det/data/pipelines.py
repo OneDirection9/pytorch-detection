@@ -13,6 +13,7 @@ from ..structures import BoxMode
 
 __all__ = [
     'PipelineRegistry',
+    'Pipeline',
     'PipelineList',
     'CrowdFilter',
     'FewKeypointsFilter',
@@ -40,21 +41,24 @@ class PipelineRegistry(Registry):
     pass
 
 
+Pipeline = Callable
+
+
 class PipelineList(object):
     """Maintains a list of pipelines which will be applied in sequence.
 
     Attributes:
-        pipelines (list[Callable]):
+        pipelines (list[Pipeline]):
     """
 
-    def __init__(self, pipelines: List[Callable]) -> None:
+    def __init__(self, pipelines: List[Pipeline]) -> None:
         """
         Args:
-            pipelines: List of callable objects which are executed one by one.
+            pipelines: List of pipelines which are executed one by one.
         """
         for ppl in pipelines:
-            if not isinstance(ppl, Callable):
-                raise TypeError('Expected a callable object. Got {}'.format(type(ppl)))
+            if not isinstance(ppl, Pipeline):
+                raise TypeError('Expected a Pipeline. Got {}'.format(type(ppl)))
 
         self.pipelines = pipelines
 
@@ -65,15 +69,13 @@ class PipelineList(object):
                 return None
         return example
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         format_string = self.__class__.__name__ + '('
         for ppl in self.pipelines:
             format_string += '\n'
             format_string += '    {0}'.format(ppl)
         format_string += '\n)'
         return format_string
-
-    __str__ = __repr__
 
 
 @PipelineRegistry.register('CrowdFilter')

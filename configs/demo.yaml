@@ -18,15 +18,6 @@ data:
       - name: AnnotationPopup
         mask_on: True
         keypoint_on: True
-    dataset_mapper:
-      name: DictMapper
-      transforms:
-        - name: ResizeShortestEdge
-          short: 800
-          max_size: 1333
-          sample_style: choice
-        - name: RandomHFlip
-          prob: 0.5
     mappers:
       - name: ImageLoader
       - name: ResizeShortestEdge
@@ -43,13 +34,13 @@ data:
         image_root: ./data/MSCOCO/val2017/
         metadata:
           name: COCOPersonMetadata
-    dataset_mapper:
-      name: DictMapper
-      transforms:
-        - name: ResizeShortestEdge
-          short: 800
-          max_size: 1333
-          sample_style: choice
+    mappers:
+      - name: ImageLoader
+      - name: ResizeShortestEdge
+        short: 800
+        max_size: 1333
+        sample_style: choice
+      - name: ToInstances
 
 dataloader:
   train:
