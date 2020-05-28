@@ -30,7 +30,11 @@ __all__ = [
 
 
 class MapperRegistry(Registry):
-    """Registry of mappers."""
+    """Registry of mappers.
+
+    Similar to pipeline, a mapper is also used to process a single example. But the mappers are
+    on-the-fly and may with randomness.
+    """
     pass
 
 
@@ -473,7 +477,7 @@ class TransformApply(object):
 
         return example
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return 'Apply(transform={0})'.format(self.transform)
 
 

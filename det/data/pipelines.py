@@ -98,7 +98,7 @@ class CrowdFilter(object):
             example['annotations'] = res
             return example
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__class__.__name__ + '()'
 
 
@@ -127,7 +127,7 @@ class FewKeypointsFilter(object):
         else:
             return example
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__class__.__name__ + '(min_keypoints_per_image={0})'.format(
             self.min_keypoints_per_image
         )
@@ -172,7 +172,7 @@ class FormatConverter(object):
 
         return example
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__class__.__name__ + '()'
 
 
@@ -198,7 +198,7 @@ class AnnotationPopup(object):
                 ann.pop('keypoints', None)
         return example
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__class__.__name__ + '(mask_on={0}, keypoint_on={1})'.format(
             self.mask_on, self.keypoint_on
         )
