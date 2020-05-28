@@ -27,10 +27,15 @@ data:
           sample_style: choice
         - name: RandomHFlip
           prob: 0.5
-    mapper:
+    mappers:
       - name: ImageLoader
-      - name: Resize
-      - name: RH
+      - name: ResizeShortestEdge
+        short: 800
+        max_size: 1333
+        sample_style: choice
+      - name: RandomHFlip
+        prob: 0.5
+      - name: ToInstances
   test:
     datasets:
       - name: COCOInstance

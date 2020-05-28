@@ -26,8 +26,9 @@ from ..utils.comm import get_world_size
 from ..utils.env import seed_all_rng
 from . import utils
 from .common import AspectRatioGroupedDataset, DatasetFromList, MapDataset
-from .dataset_mapper import C, DatasetMapper, DatasetMapperRegistry
+from .dataset_mapper import DatasetMapper, DatasetMapperRegistry
 from .datasets import MetadataRegistry, VisionDataset, VisionDatasetRegistry
+from .mappers import MapperList, MapperRegistry
 from .pipelines import PipelineRegistry
 from .samplers import InferenceSampler, SamplerRegistry
 from .transforms import Transform, TransformGen, TransformGenRegistry, TransformRegistry
@@ -232,6 +233,7 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
                                                 'transform': {'name': 'RandomHFlip'}},
                                                ...]}}
     """
+    data_cfg = copy.deepcopy(data_cfg)
     vision_datasets = build_vision_datasets(data_cfg['datasets'])
     if 'pipelines' in data_cfg:
         pipelines = build_pipelines(data_cfg['pipelines'])
@@ -272,14 +274,47 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
     return dataset
 
 
-def build_train_dataloader2(cfg):
-    cfg = copy.deepcopy(cfg)
-    data_cfg = cfg['data']['train']
+def build_mapper(mapper_cfg, has_keypoints, vision_datasets):
+    res = []
+    for m in mapper_cfg:
+        if m['name'] == 'RandomHFlip' and has_keypoints:
+            m['keypoint_hflip_indices'] = utils.create_keypoint_hflip_indices(vision_datasets)
+        res.append(build(MapperRegistry, m))
+    return MapperList(res)
+
+
+def build_pytorch_dataset2(data_cfg: _SingleCfg) -> Dataset:
+    """Builds PyTorch dataset from config.
+
+    Args:
+        data_cfg: Data config that should be a dictionary, looks something like:
+            {'datasets': [{'name': 'COCOInstance',
+                           'json_file': './data/MSCOCO/annotations/instances_train2014.json',
+                           'metadata': {'name': 'COCOInstanceMetadata'}}],
+             'pipelines': [{'name': 'FewKeypointsFilter', 'min_keypoints_per_image': 0},
+                           {'name': 'FormatConverter'}],
+             'dataset_mapper': {'name': 'DictMapper',
+                                'transforms': [{'name': 'RandomApply',
+                                                'transform': {'name': 'RandomHFlip'}},
+                                               ...]}}
+    """
     vision_datasets = build_vision_datasets(data_cfg['datasets'])
     if 'pipelines' in data_cfg:
         pipelines = build_pipelines(data_cfg['pipelines'])
     else:
         pipelines = None
+    # examples is a list[dict], where each dict is a record for an image. Example of examples:
+    # ['file_name': './data/MSCOCO/train2017/000000000036.jpg'
+    #  'height': 640,
+    #  'width': 481,
+    #  'image_id': 36,
+    #  'annotations: [{'iscrowd': 0,
+    #                  'bbox': [167.58, 162.89, 478.19, 628.08],
+    #                  'segmentation': [345.28, 220.68, ...],
+    #                  'keypoints': [250.5, 244.5, 2, ...],
+    #                  'category_id': 0},
+    #                 ...]
+    #  ...]
     examples = get_dataset_examples(vision_datasets, pipelines)
 
     # Check metadata across multiple datasets
@@ -293,14 +328,11 @@ def build_train_dataloader2(cfg):
 
     dataset = DatasetFromList(examples, copy=False, serialization=True)
 
-    if 'mapper' in data_cfg:
-        kh = utils.create_keypoint_hflip_indices(vision_datasets)
-        mappers = []
-        for c in data_cfg['mapper']:
-            if c['name'] == 'RH':
-                c['kh'] = kh
-            mappers.append(build(DatasetMapperRegistry, c))
-        dataset = MapDataset(dataset, C(mappers))
+    if 'mappers' in data_cfg:
+        has_keypoints = has_instances and 'keypoints' in examples[0]['annotations'][0]
+        dataset_mapper = build_mapper(data_cfg['mappers'], has_keypoints, vision_datasets)
+        dataset = MapDataset(dataset, dataset_mapper)
+
     return dataset
 
 

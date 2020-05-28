@@ -8,5 +8,6 @@ from . import datasets
 from . import pipelines
 from . import samplers
 from . import transforms
+from . import mappers
 from .build import *
 from .common import *

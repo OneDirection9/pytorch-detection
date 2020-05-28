@@ -11,7 +11,11 @@ __all__ = ['VisionDatasetRegistry', 'VisionDataset']
 
 
 class VisionDatasetRegistry(Registry):
-    """Registry of VisionDataset."""
+    """Registry of vision datasets.
+
+    A vision dataset should have get_examples method returning list of examples in dictionary, and
+    metadata attribute. See :class:`VisionDataset`.
+    """
     pass
 
 

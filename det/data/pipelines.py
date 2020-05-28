@@ -40,23 +40,20 @@ class PipelineRegistry(Registry):
     pass
 
 
-Pipeline = Callable
-
-
 class PipelineList(object):
     """Maintains a list of pipelines which will be applied in sequence.
 
     Attributes:
-        pipelines (list[Pipeline]):
+        pipelines (list[Callable]):
     """
 
-    def __init__(self, pipelines: List[Pipeline]) -> None:
+    def __init__(self, pipelines: List[Callable]) -> None:
         """
         Args:
-            pipelines: List of pipelines which are executed one by one.
+            pipelines: List of callable objects which are executed one by one.
         """
         for ppl in pipelines:
-            if not isinstance(ppl, Pipeline):
+            if not isinstance(ppl, Callable):
                 raise TypeError('Expected a callable object. Got {}'.format(type(ppl)))
 
         self.pipelines = pipelines
