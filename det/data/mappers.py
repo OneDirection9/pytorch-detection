@@ -406,8 +406,8 @@ class TransformApply(object):
                 keypoints = keypoints[keypoint_hflip_indices, :]
 
             # Maintain COCO convention that if visibility == 0, then x, y = 0
-            # TODO may need to reset visibility for cropped keypoints,
-            # but it does not matter for our existing algorithms
+            # TODO: may need to reset visibility for cropped keypoints, but it does not matter for
+            #   our existing algorithms
             keypoints[keypoints[:, 2] == 0] = 0
             annotation['keypoints'] = keypoints
 
@@ -444,9 +444,9 @@ class TransformApply(object):
         max_yx = np.maximum(np.asarray(image_size, dtype=np.int32) - crop_size, 0)
         max_yx = np.minimum(max_yx, np.ceil(center_yx).astype(np.int32))
 
-        y0 = np.random.randint(min_yx[0], max_yx[0] + 1)
-        x0 = np.random.randint(min_yx[1], max_yx[1] + 1)
-        return T.CropTransform(x0, y0, crop_size[1], crop_size[0])
+        y1 = np.random.randint(min_yx[0], max_yx[0] + 1)
+        x1 = np.random.randint(min_yx[1], max_yx[1] + 1)
+        return T.CropTransform(x1, y1, crop_size[1], crop_size[0])
 
     def __call__(self, example: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(self.transform, T.RandomCrop) and 'annotations' in example:

@@ -142,10 +142,10 @@ def build_mappers(
     """Builds list of mappers from config.
 
     Args:
-        mapper_cfg: Mapper config that should be a dictionary, and looks something like:
+        mapper_cfg: Mapper config that should be a dictionary or a list of dictionaries, each looks
+            something like:
             {'name': 'ResizeShortestEdge',
-             'short': 800,
-             ...}
+             'short': 800}
         has_keypoints: Whether has keypoints in annotations. If True, the keypoint_hflip_indices
             will be created.
         vision_datasets: List of vision datasets.
