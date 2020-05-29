@@ -1,12 +1,12 @@
 data:
   train:
     datasets:
-      - name: COCOInstance
-        json_file: ./data/MSCOCO/annotations/instances_train2017.json
-        image_root: ./data/MSCOCO/train2017/
-#      - name: COCOPerson
-#        json_file: ./data/MSCOCO/annotations/person_keypoints_train2017.json
+#      - name: COCOInstance
+#        json_file: ./data/MSCOCO/annotations/instances_train2017.json
 #        image_root: ./data/MSCOCO/train2017/
+      - name: COCOPerson
+        json_file: ./data/MSCOCO/annotations/person_keypoints_train2017.json
+        image_root: ./data/MSCOCO/train2017/
     pipelines:
       - name: CrowdFilter
       - name: FewKeypointsFilter

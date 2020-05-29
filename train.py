@@ -1,7 +1,7 @@
 from __future__ import absolute_import, division, print_function
 
-from foundation import io as fdn_io
-from foundation.utils import configure_logging
+from foundation.common import file_io as fdn_io
+from foundation.common.log import configure_logging
 
 from det.data.build import get_dataset_examples
 

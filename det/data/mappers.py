@@ -480,5 +480,6 @@ class TransformApply(object):
         return 'Apply(transform={0})'.format(self.transform)
 
 
-MapperRegistry.register_partial('ResizeShortestEdge', TransformApply, T.ResizeShortestEdge)
-MapperRegistry.register_partial('RandomHFlip', TransformApply, T.RandomHFlip)
+# Register wrappers presetting transform_cls
+MapperRegistry.register_partial('ResizeShortestEdge', T.ResizeShortestEdge)(TransformApply)
+MapperRegistry.register_partial('RandomHFlip', T.RandomHFlip)(TransformApply)

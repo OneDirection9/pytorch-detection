@@ -1,6 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
-from foundation.utils import Registry
+from foundation.registry import Registry
 
 __all__ = [
     'ArchStash',

@@ -9,7 +9,7 @@ import logging
 import os.path as osp
 from typing import Any, Dict, List, Optional
 
-from foundation.utils import Timer
+from foundation.common.timer import Timer
 from pycocotools.coco import COCO
 
 from det.structures import BoxMode
@@ -192,13 +192,15 @@ class COCODataset(VisionDataset):
         return dataset_dicts
 
 
-# Preset metadata
+# Registry datasets presetting the metadata
 VisionDatasetRegistry.register_partial(
-    'COCOInstance', COCODataset, metadata=get_coco_instance_metadata()
-)
+    'COCOInstance', metadata=get_coco_instance_metadata()
+)(COCODataset)  # yapf: disable
+
 VisionDatasetRegistry.register_partial(
-    'COCOPanoptic', COCODataset, metadata=get_coco_panoptic_metadata()
-)
+    'COCOPanoptic', metadata=get_coco_panoptic_metadata()
+)(COCODataset)  # yapf: disable
+
 VisionDatasetRegistry.register_partial(
-    'COCOPerson', COCODataset, metadata=get_coco_person_metadata()
-)
+    'COCOPerson', metadata=get_coco_person_metadata()
+)(COCODataset)  # yapf: disable
