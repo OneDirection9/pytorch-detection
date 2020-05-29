@@ -9,7 +9,7 @@ import numpy as np
 import pycocotools.mask as mask_util
 from foundation.registry import Registry
 
-from ..structures import BoxMode
+from det.structures import BoxMode
 
 __all__ = [
     'PipelineRegistry',

@@ -10,7 +10,7 @@ import torch
 from foundation.registry import Registry
 from torch.utils.data import Dataset, Sampler
 
-from ...utils import comm
+from det.utils import comm
 
 __all__ = ['SamplerRegistry', 'TrainingSampler', 'InferenceSampler']
 

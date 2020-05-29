@@ -7,7 +7,7 @@ from typing import Dict, Optional
 import torch
 from torch import nn
 
-__all__ = ['Conv2d', 'ShapeSpec']
+__all__ = ['Conv2d', 'ShapeSpec', 'Module']
 
 
 class Conv2d(nn.Conv2d):

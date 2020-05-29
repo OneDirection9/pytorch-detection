@@ -8,7 +8,7 @@ from foundation.registry import Registry
 from PIL import Image, ImageOps
 from pycocotools import mask as mask_util
 
-from ..structures import (
+from det.structures import (
     BitMasks,
     Boxes,
     BoxMode,

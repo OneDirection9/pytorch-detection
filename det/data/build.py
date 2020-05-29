@@ -22,8 +22,8 @@ import numpy as np
 from foundation.registry import build
 from torch.utils.data import BatchSampler, DataLoader, Dataset
 
-from ..utils.comm import get_world_size
-from ..utils.env import seed_all_rng
+from det.utils.comm import get_world_size
+from det.utils.env import seed_all_rng
 from . import utils
 from .common import AspectRatioGroupedDataset, DatasetFromList, MapDataset
 from .datasets import VisionDataset, VisionDatasetRegistry
