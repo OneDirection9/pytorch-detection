@@ -38,7 +38,7 @@ class TrainingSampler(Sampler):
         self,
         data_source: Union[list, Dataset],
         shuffle: bool = True,
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
     ) -> None:
         """
         Args:

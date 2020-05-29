@@ -174,7 +174,7 @@ class ToInstances(object):
         cls,
         anns: List[Dict[str, Any]],
         image_size: Tuple[int, int],
-        mask_format: str = 'polygon'
+        mask_format: str = 'polygon',
     ) -> Instances:
         """Creates an :class:`Instances` object ysed by the models from instance annotations.
 
@@ -242,7 +242,7 @@ class ToInstances(object):
         instances: Instances,
         by_box: bool = True,
         by_mask: bool = True,
-        box_threshold: float = 1e-5
+        box_threshold: float = 1e-5,
     ) -> Instances:
         """Filters out empty instances in an `Instances` object.
 
@@ -308,7 +308,7 @@ class TransformApply(object):
         *args: Any,
         random_apply: Optional[float] = None,
         keypoint_hflip_indices: Optional[np.ndarray] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """
         Args:
@@ -333,7 +333,7 @@ class TransformApply(object):
         transforms: Union[T.Transform, T.TransformList],
         image_size: Tuple[int, int],
         *,
-        keypoint_hflip_indices: Optional[np.ndarray] = None
+        keypoint_hflip_indices: Optional[np.ndarray] = None,
     ) -> Dict[str, Any]:
         """Applies transforms to box, segmentation and keypoints annotations of a single instance.
 

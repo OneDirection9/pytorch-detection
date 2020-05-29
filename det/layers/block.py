@@ -21,6 +21,12 @@ class CNNBlockBase(nn.Module):
     """
 
     def __init__(self, in_channels: int, out_channels: int, stride: int) -> None:
+        """
+        Args:
+            in_channels:
+            out_channels:
+            stride:
+        """
         super(CNNBlockBase, self).__init__()
 
         self.in_channels = in_channels
