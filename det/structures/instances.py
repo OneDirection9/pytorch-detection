@@ -107,7 +107,7 @@ class Instances(object):
         return self._fields
 
     # Tensor-like methods
-    def to(self, device: str) -> 'Instances':
+    def to(self, *args: Any, **kwargs: Any) -> 'Instances':
         """
         Returns:
             Instances: all fields are called with a `to(device)`, if the field has this method.
@@ -115,7 +115,7 @@ class Instances(object):
         ret = Instances(self._image_size)
         for k, v in self._fields.items():
             if hasattr(v, 'to'):
-                v = v.to(device)
+                v = v.to(*args, **kwargs)
             ret.set(k, v)
         return ret
 

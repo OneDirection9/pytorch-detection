@@ -1,7 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import math
 from enum import IntEnum, unique
-from typing import Iterator, List, Tuple, Union
+from typing import Any, Iterator, List, Tuple, Union
 
 import numpy as np
 import torch
@@ -171,8 +171,8 @@ class Boxes(object):
         """
         return Boxes(self.tensor.clone())
 
-    def to(self, device: str) -> 'Boxes':
-        return Boxes(self.tensor.to(device))
+    def to(self, *args: Any, **kwargs: Any) -> 'Boxes':
+        return Boxes(self.tensor.to(*args, **kwargs))
 
     def area(self) -> torch.Tensor:
         """Computes the area of all the boxes.

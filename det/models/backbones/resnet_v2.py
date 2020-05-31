@@ -3,7 +3,6 @@ from __future__ import absolute_import, division, print_function
 from typing import Callable, Union
 
 import torch
-import torch.nn as nn
 from foundation.nn import weight_init
 from torch.nn import functional as F
 
@@ -37,7 +36,7 @@ class BasicBlock(layers.CNNBlockBase):
         """
         super(BasicBlock, self).__init__(in_channels, out_channels, stride)
 
-        if in_channels != out_channels:
+        if stride != 1 or in_channels != out_channels:
             self.shortcut = layers.Conv2d(
                 in_channels,
                 out_channels,
@@ -124,7 +123,7 @@ class BottleneckBlock(layers.CNNBlockBase):
         """
         super(BottleneckBlock, self).__init__(in_channels, out_channels, stride)
 
-        if in_channels != out_channels:
+        if stride != 1 or in_channels != out_channels:
             self.shortcut = layers.Conv2d(
                 in_channels,
                 out_channels,
@@ -133,6 +132,75 @@ class BottleneckBlock(layers.CNNBlockBase):
                 bias=False,
                 norm=layers.get_norm(norm, out_channels),
             )
-            nn.init.uniform_(self.shortcut.weight)
         else:
             self.shortcut = None
+
+        # The original MSRA ResNet models have stride in the first 1x1 conv
+        # The subsequent fb.torch.resnet and Caffe2 ResNe[X]t implementations have
+        # stride in the 3x3 conv
+        stride_1x1, stride_3x3 = (stride, 1) if stride_in_1x1 else (1, stride)
+
+        self.conv1 = layers.Conv2d(
+            in_channels,
+            bottleneck_channels,
+            kernel_size=1,
+            stride=stride_1x1,
+            bias=False,
+            norm=layers.get_norm(norm, bottleneck_channels),
+        )
+        self.conv2 = layers.Conv2d(
+            bottleneck_channels,
+            bottleneck_channels,
+            kernel_size=3,
+            stride=stride_3x3,
+            padding=1 * dilation,
+            bias=False,
+            groups=num_groups,
+            dilation=dilation,
+            norm=layers.get_norm(norm, bottleneck_channels),
+        )
+        self.conv3 = layers.Conv2d(
+            bottleneck_channels,
+            out_channels,
+            kernel_size=1,
+            bias=False,
+            norm=layers.get_norm(norm, out_channels)
+        )
+
+        for layer in [self.conv1, self.conv2, self.conv3, self.shortcut]:
+            if layer is not None:  # shortcut can be None
+                weight_init.caffe2_msra_init(layer)
+
+        # Zero-initialize the last normalization in each residual branch,
+        # so that at the beginning, the residual branch starts with zeros,
+        # and each residual block behaves like an identity.
+        # See Sec 5.1 in "Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour":
+        # "For BN layers, the learnable scaling coefficient γ is initialized
+        # to be 1, except for each residual block's last BN
+        # where γ is initialized to be 0."
+
+        # nn.init.constant_(self.conv3.norm.weight, 0)
+        # TODO: this somehow hurts performance when training GN models from scratch.
+        #   Add it as an option when we need to use this code to train a backbone.
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.conv1(x)
+        out = F.relu_(out)
+
+        out = self.conv2(out)
+        out = F.relu_(out)
+
+        out = self.conv3(out)
+
+        if self.shortcut is not None:
+            shortcut = self.shortcut(x)
+        else:
+            shortcut = None
+
+        out += shortcut
+        out = F.relu_(out)
+        return out
+
+
+class BasicStem(layers.CNNBlockBase):
+    pass
