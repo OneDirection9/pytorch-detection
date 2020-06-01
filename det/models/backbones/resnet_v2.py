@@ -1,12 +1,13 @@
 from __future__ import absolute_import, division, print_function
 
-from typing import Callable, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import torch
 from foundation.nn import weight_init
 from torch.nn import functional as F
 
 from det import layers
+from det.layers import ShapeSpec
 
 
 class BasicBlock(layers.CNNBlockBase):
@@ -106,7 +107,7 @@ class BottleneckBlock(layers.CNNBlockBase):
         stride: int = 1,
         num_groups: int = 1,
         norm: Union[str, Callable] = 'BN',
-        stride_in_1x1: bool = False,
+        stride_in_1x1: bool = True,
         dilation: int = 1,
     ) -> None:
         """
@@ -203,4 +204,149 @@ class BottleneckBlock(layers.CNNBlockBase):
 
 
 class BasicStem(layers.CNNBlockBase):
-    pass
+    """The standard ResNet stem (layers before the first residual block)."""
+
+    def __init__(
+        self,
+        in_channels: int = 3,
+        out_channels: int = 64,
+        norm: Union[str, Callable] = 'BN'
+    ) -> None:
+        super(BasicStem, self).__init__(in_channels, out_channels, 4)
+
+        self.conv1 = layers.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False,
+            norm=layers.get_norm(norm, out_channels),
+        )
+        weight_init.caffe2_msra_init(self.conv1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.conv1(x)
+        x = F.relu_(x)
+        x = F.max_pool2d(x, kernel_size=3, stride=2, padding=1)
+        return x
+
+
+class ResNet(layers.Module):
+    """`Deep Residual Learning for Image Recognition`_.
+
+    .. _`Deep Residual Learning for Image Recognition`:
+        https://arxiv.org/abs/1512.03385
+    """
+    # Mapping depth to block class and stage blocks
+    settings = {
+        18: (BasicBlock, (2, 2, 2, 2)),
+        34: (BasicBlock, (3, 4, 6, 3)),
+        50: (BottleneckBlock, (3, 4, 6, 3)),
+        101: (BottleneckBlock, (3, 4, 23, 3)),
+        152: (BottleneckBlock, (3, 8, 36, 3)),
+    }
+
+    def __init__(
+        self,
+        depth: int = 50,
+        in_channels: int = 3,
+        stem_out_channels: int = 64,
+        res2_out_channels: int = 256,
+        num_classes: Optional[int] = None,
+        out_features: List[str] = ('res4',),
+        norm: Union[str, Callable] = 'FrozenBN',
+        num_groups: int = 1,
+        width_per_group: int = 64,
+        stride_in_1x1: bool = True,
+        res5_dilation: int = 1,
+        freeze_at: int = 2,
+    ) -> None:
+        """
+        Args:
+            depth:
+            in_channels:
+            stem_out_channels:
+            res2_out_channels:
+            num_classes:
+            out_features:
+            norm:
+            num_groups:
+            width_per_group:
+            stride_in_1x1:
+            res5_dilation:
+            freeze_at:
+        """
+        super(ResNet, self).__init__()
+
+        if res5_dilation not in (1, 2):
+            raise ValueError('res5_dilation can only be 1 or 2. Got {}'.format(res5_dilation))
+        if depth in [18, 34]:
+            if res2_out_channels != 64:
+                raise ValueError('Must set res2_out_channels = 64 for R18/R34')
+            if res5_dilation != 1:
+                raise ValueError('Must set res5_dilation = 1 for R18/R34')
+            if num_groups != 1:
+                raise ValueError('Must set num_groups = 1 for R18/R34')
+
+        block_class, stage_blocks = self.settings[depth]
+
+        self.stem = BasicStem(in_channels, stem_out_channels, norm)
+
+        in_channels = stem_out_channels
+        out_channels = res2_out_channels
+        bottleneck_channels = num_groups * width_per_group
+
+        # Avoid creating variables without gradients
+        # It consumes extra memory and may cause all-reduce to fail
+        feature_to_idx = {'res2': 2, 'res3': 3, 'res4': 4, 'res5': 5}
+        out_stage_idx = [feature_to_idx[f] for f in out_features]
+        max_stage_idx = max(out_stage_idx)
+        stages = []
+        for idx, stage_idx in enumerate(range(2, max_stage_idx + 1)):
+            dilation = res5_dilation if stage_idx == 5 else 1
+            first_stride = 1 if stage_idx == 2 or (stage_idx == 5 and dilation == 2) else 2
+            stage_kwargs = {
+                'block_class': block_class,
+                'num_blocks': stage_blocks[idx],
+                'first_stride': first_stride,
+                'in_channels': in_channels,
+                'out_channels': out_channels,
+                'norm': norm,
+            }
+
+            if depth in (50, 101, 152):
+                stage_kwargs['bottleneck_channels'] = bottleneck_channels
+                stage_kwargs['stride_in_1x1'] = stride_in_1x1
+                stage_kwargs['dilation'] = dilation
+                stage_kwargs['num_groups'] = num_groups
+
+            blocks = self.make_stage(**stage_kwargs)
+            in_channels = out_channels
+            out_channels *= 2
+            bottleneck_channels *= 2
+            stages.append(blocks)
+
+    @classmethod
+    def make_stage(
+        cls, block_class, num_blocks, first_stride, *, in_channels, out_channels, **kwargs
+    ):
+        if 'stride' in kwargs:
+            raise ValueError('Stride of blocks in make_stage cannot be changed.')
+
+        blocks = []
+        for i in range(num_blocks):
+            blocks.append(
+                block_class(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    stride=first_stride if i == 0 else 1,
+                    **kwargs,
+                )
+            )
+            in_channels = out_channels
+        return blocks
+
+    @property
+    def output_shape(self) -> Dict[str, ShapeSpec]:
+        return dict()
