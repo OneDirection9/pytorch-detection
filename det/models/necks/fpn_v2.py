@@ -109,15 +109,23 @@ class FPN(layers.Module):
         elif top_block == '':
             self.top_block = None
         else:
-            raise ValueError("top_block can be one of '', 'rcnn', or 'retinanet'")
-
-        if self.top_block is not None:
-            pass
+            raise ValueError(
+                "top_block can be one of '', 'rcnn', or 'retinanet'. Got {}".format(top_block)
+            )
 
         self._output_shape = {}
+        self._out_features = []
         for stride in in_strides:
             name = 'p{}'.format(int(math.log2(stride)))
             self._output_shape[name] = layers.ShapeSpec(channels=out_channels, stride=stride)
+            self._out_features.append(name)
+
+        if self.top_block is not None:
+            stage = int(math.log2(in_strides[-1])) + 1
+            for s in range(stage, self.top_block.num_levels):
+                name = 'p{}'.format(s)
+                self._output_shape[name] = layers.ShapeSpec(channels=out_channels, stride=2 ** s)
+                self._out_features.append(name)
 
     def forward(self, x: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         x = [x[f] for f in self.in_features]
