@@ -70,19 +70,6 @@ class ShapeSpec(namedtuple('_ShapeSpec', ['channels', 'height', 'width', 'stride
 class Module(nn.Module, metaclass=ABCMeta):
     """A wrapper around :class:`torch.nn.Module` to support output_shape and size_divisibility."""
 
-    def __init__(self):
-        """The `__init__` method of any subclass can specify its own set of arguments."""
-        super().__init__()
-
-    @abstractmethod
-    def forward(self) -> Dict[str, torch.Tensor]:
-        """Subclasses must override this method, but adhere to the same return type.
-
-        Returns:
-            dict[str->Tensor]: mapping from feature name (e.g., "res2") to tensor
-        """
-        pass
-
     @property
     def size_divisibility(self) -> int:
         """

@@ -1,418 +1,460 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
-#
-# Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
-from foundation.backends.torch.utils import weight_init
+from typing import Any, Callable, Dict, List, Optional, Type, Union
+
+import numpy as np
+import torch
+from foundation.nn import weight_init
 from torch import nn
-from torch.nn.modules.batchnorm import _BatchNorm
+from torch.nn import functional as F
 
-from ..registry import BackboneStash
-from ..utils import get_norm
+from det import layers
+from det.layers import ShapeSpec
 
-__all__ = ['ResNet']
-
-
-def conv3x3(in_planes, out_planes, stride=1, dilation=1, groups=1):
-    """3x3 convolution with padding.
-
-    The output size is computed as follows (floor division):
-        out = (in + 2 * padding - (kernel_size - 1) * dilation - 1) / stride + 1
-            = (in + 2 * dilation - (3 - 1) * dilation - 1) / stride + 1
-            = (in - 1) / stride + 1
-    """
-    return nn.Conv2d(
-        in_planes,
-        out_planes,
-        3,
-        stride=stride,
-        padding=dilation,
-        dilation=dilation,
-        groups=groups,
-        bias=False
-    )
+__all__ = ['BasicBlock', 'BottleneckBlock', 'BasicStem', 'ResNet']
 
 
-def conv1x1(in_planes, out_planes, stride=1):
-    return nn.Conv2d(in_planes, out_planes, 1, stride=stride, bias=False)
+class BasicBlock(layers.CNNBlockBase):
+    """The basic residual block for ResNet-18 and ResNet-34.
 
-
-class BasicBlock(nn.Module):
-    """Basic block used by res-18 and res-34 typically.
-
-    Some not used arguments are added to keep the arguments the same as Bottleneck, i.e.
-    bottleneck_channels, groups, is_msra. Keep the default settings, otherwise it will
-    raise a ValueError.
-
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        bottleneck_channels (int): Number of bottleneck channels. Not used.
-        stride (int, optional): Number of stride. Default: 1
-        dilation (int, optional): Number of dilation. Default: 1
-        groups (int, optional): Number of groups. Not used. Default: 1
-        norm (str, optional): Name of normalization. Default: `BN`
-        is_msra (bool, optional): Apply stride in first conv layer or second conv layer.
-            Not used. Default: ``True``
-    """
-
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        bottleneck_channels,
-        stride=1,
-        dilation=1,
-        groups=1,
-        norm='BN',
-        is_msra=True
-    ):
-        super(BasicBlock, self).__init__()
-
-        if out_channels != bottleneck_channels:
-            raise ValueError('BasicBlock only supports out_channels == bottleneck_channels')
-        if groups != 1:
-            raise ValueError('BasicBlock only supports groups=1')
-        if not is_msra:
-            raise ValueError('BasicBlock only supports is_msra=True')
-
-        if stride != 1 or in_channels != out_channels:
-            self.downsample = nn.Sequential(
-                conv1x1(in_channels, out_channels, stride=stride),
-                get_norm(norm, out_channels),
-            )
-        else:
-            self.downsample = None
-
-        self.conv1 = conv3x3(in_channels, out_channels, stride, dilation=dilation)
-        self.norm1 = get_norm(norm, out_channels)
-
-        self.conv2 = conv3x3(out_channels, out_channels)
-        self.norm2 = get_norm(norm, out_channels)
-
-        self.relu = nn.ReLU(inplace=True)
-
-    def forward(self, x):
-        out = self.conv1(x)
-        out = self.norm1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.norm2(out)
-
-        if self.downsample is not None:
-            identity = self.downsample(x)
-        else:
-            identity = x
-
-        out += identity
-        out = self.relu(out)
-
-        return out
-
-
-class Bottleneck(nn.Module):
-    """Bottleneck used by res-50, res-101, res-152 typically.
-
-    Args:
-        in_channels (int): Number of input channels.
-        out_channels (int): Number of output channels.
-        bottleneck_channels (int): Number of bottleneck channels.
-        stride (int, optional): Number of stride. Default: 1
-        dilation (int, optional): Number of dilation. Default: 1
-        groups (int, optional): Number of groups. Default: 1
-        norm (str, optional): Name of normalization. Default: `BN`
-        is_msra (bool, optional): Apply stride in first conv layer for original MSRA
-            ResNet or second conv layer for C2 and Torch Models. Default: ``True``
-    """
-
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        bottleneck_channels,
-        stride=1,
-        dilation=1,
-        groups=1,
-        norm='BN',
-        is_msra=True
-    ):
-        super(Bottleneck, self).__init__()
-
-        if stride != 1 or in_channels != out_channels:
-            self.downsample = nn.Sequential(
-                conv1x1(in_channels, out_channels, stride),
-                get_norm(norm, out_channels),
-            )
-        else:
-            self.downsample = None
-
-        # The original MSRA ResNet models have stride in the first 1x1 conv
-        # The subsequent fb.torch.resnet and Caffe2 ResNe[X]t implementations have
-        # stride in the 3x3 conv
-        if is_msra:
-            conv1_stride, conv2_stride = stride, 1
-        else:
-            conv1_stride, conv2_stride = 1, stride
-
-        self.conv1 = conv1x1(in_channels, bottleneck_channels, conv1_stride)
-        self.norm1 = get_norm(norm, bottleneck_channels)
-
-        self.conv2 = conv3x3(
-            bottleneck_channels,
-            bottleneck_channels,
-            conv2_stride,
-            dilation=dilation,
-            groups=groups
-        )
-        self.norm2 = get_norm(norm, bottleneck_channels)
-
-        self.conv3 = conv1x1(bottleneck_channels, out_channels)
-        self.norm3 = get_norm(norm, out_channels)
-
-        self.relu = nn.ReLU(inplace=True)
-
-    def forward(self, x):
-        out = self.conv1(x)
-        out = self.norm1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.norm2(out)
-        out = self.relu(out)
-
-        out = self.conv3(out)
-        out = self.norm3(out)
-
-        if self.downsample is not None:
-            identity = self.downsample(x)
-        else:
-            identity = x
-
-        out += identity
-        out = self.relu(out)
-
-        return out
-
-
-@BackboneStash.register('ResNet')
-class ResNet(nn.Module):
-    """`Deep Residual Learning for Image Recognition`_.
-
-    Args:
-        depth (int): Depth of ResNet, typically is 18, 34, 50, 101, 152.
-        in_channels (int, optional): Number of input image channels. Default: 3
-        stem_out_channels (int, optional): Number of conv output channels in stem which
-            consists of Conv -> Norm -> ReLU -> MaxPool layers. It is also the input
-            channels of residual layer. Default: 64
-        res2_out_channels (int, optional): Number of output channels in first stage, i.e.
-            'res2' layer. This will be doubled by stage. Default: 256
-        num_classes (int, optional): If None, will not perform classification.
-        out_features (list[str], optional): Name of the layers whose outputs should be
-            returned in forward. Can be anything in 'stem', 'res2', 'res3', 'res4',
-            'res5'. If `num_classes` is provided, another 'linear` output is appended.
-            Default: ('res2', 'res3', 'res4', 'res5')
-        freeze_stages (int, optional):  The 1-indexed stages that less and equal to this
-            will be frozen. If <= 0, no stages will be frozen. Default: 0
-        groups (int, optional): Number of groups. Default: 1
-        base_width_per_group (int, optional): Basic width of each group. This will be
-            doubled by stage. Default: 64
-        norm (str, optional): Name of normalization. Default: `BN`
-        norm_eval (bool, optional): If ``True``, normalization layer is set to eval mode.
-            Default: ``True``
-        is_msra (bool, optional): Apply stride in first conv layer for original MSRA
-            ResNet or second conv layer for C2 and Torch Models. Default: ``True``
+    The block has two 3x3 conv layers and a projection shortcut if needed defined in
+    `Deep Residual Learning for Image Recognition`_.
 
     .. _`Deep Residual Learning for Image Recognition`:
         https://arxiv.org/abs/1512.03385
     """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        *,
+        stride: int = 1,
+        norm: Union[str, Callable] = 'BN',
+    ) -> None:
+        """
+        Args:
+            in_channels: Number of input channels.
+            out_channels: Number of output channels.
+            stride: Stride of the first conv.
+            norm: Normalization for all conv layers. See :func:`get_norm` for supported format.
+        """
+        super(BasicBlock, self).__init__(in_channels, out_channels, stride)
+
+        if stride != 1 or in_channels != out_channels:
+            self.shortcut = layers.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=1,
+                stride=stride,
+                bias=False,
+                norm=layers.get_norm(norm, out_channels),
+            )
+        else:
+            self.shortcut = None
+
+        self.conv1 = layers.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=stride,
+            padding=1,
+            bias=False,
+            norm=layers.get_norm(norm, out_channels),
+        )
+
+        self.conv2 = layers.Conv2d(
+            out_channels,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+            norm=layers.get_norm(norm, out_channels),
+        )
+
+        for layer in [self.conv1, self.conv2, self.shortcut]:
+            if layer is not None:  # shortcut can be None
+                weight_init.caffe2_msra_init(layer)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.conv1(x)
+        out = F.relu_(out)
+        out = self.conv2(out)
+
+        if self.shortcut is not None:
+            shortcut = self.shortcut(x)
+        else:
+            shortcut = x
+
+        out += shortcut
+        out = F.relu_(out)
+        return out
+
+
+class BottleneckBlock(layers.CNNBlockBase):
+    """The standard bottleneck block used by ResNet-50, 101 and 152.
+
+    The block has 3 conv layers with kernels 1x1, 3x3, 1x1, and a projection shortcut if needed
+    defined in `Deep Residual Learning for Image Recognition`_.
+
+    .. _`Deep Residual Learning for Image Recognition`:
+        https://arxiv.org/abs/1512.03385
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        *,
+        bottleneck_channels: int,
+        stride: int = 1,
+        num_groups: int = 1,
+        norm: Union[str, Callable] = 'BN',
+        stride_in_1x1: bool = True,
+        dilation: int = 1,
+    ) -> None:
+        """
+        Args:
+            in_channels: Number of input channels.
+            out_channels: Number of output channels.
+            bottleneck_channels: Number of output channels for the 3x3 'bottleneck' conv layers.
+            stride: Stride of the first conv.
+            num_groups: Number of groups for the 3x3 conv layer.
+            norm: Normalization for all conv layers. See :func:`get_norm` for supported format.
+            stride_in_1x1: When stride>1, whether to put stride in the first 1x1 convolution or the
+                bottleneck 3x3 convolution.
+            dilation: The dilation rate of the 3x3 conv layer.
+        """
+        super(BottleneckBlock, self).__init__(in_channels, out_channels, stride)
+
+        if stride != 1 or in_channels != out_channels:
+            self.shortcut = layers.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=1,
+                stride=stride,
+                bias=False,
+                norm=layers.get_norm(norm, out_channels),
+            )
+        else:
+            self.shortcut = None
+
+        # The original MSRA ResNet models have stride in the first 1x1 conv
+        # The subsequent fb.torch.resnet and Caffe2 ResNe[X]t implementations have
+        # stride in the 3x3 conv
+        stride_1x1, stride_3x3 = (stride, 1) if stride_in_1x1 else (1, stride)
+
+        self.conv1 = layers.Conv2d(
+            in_channels,
+            bottleneck_channels,
+            kernel_size=1,
+            stride=stride_1x1,
+            bias=False,
+            norm=layers.get_norm(norm, bottleneck_channels),
+        )
+        self.conv2 = layers.Conv2d(
+            bottleneck_channels,
+            bottleneck_channels,
+            kernel_size=3,
+            stride=stride_3x3,
+            padding=1 * dilation,
+            bias=False,
+            groups=num_groups,
+            dilation=dilation,
+            norm=layers.get_norm(norm, bottleneck_channels),
+        )
+        self.conv3 = layers.Conv2d(
+            bottleneck_channels,
+            out_channels,
+            kernel_size=1,
+            bias=False,
+            norm=layers.get_norm(norm, out_channels)
+        )
+
+        for layer in [self.conv1, self.conv2, self.conv3, self.shortcut]:
+            if layer is not None:  # shortcut can be None
+                weight_init.caffe2_msra_init(layer)
+
+        # Zero-initialize the last normalization in each residual branch,
+        # so that at the beginning, the residual branch starts with zeros,
+        # and each residual block behaves like an identity.
+        # See Sec 5.1 in "Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour":
+        # "For BN layers, the learnable scaling coefficient γ is initialized
+        # to be 1, except for each residual block's last BN
+        # where γ is initialized to be 0."
+
+        # nn.init.constant_(self.conv3.norm.weight, 0)
+        # TODO: this somehow hurts performance when training GN models from scratch.
+        #   Add it as an option when we need to use this code to train a backbone.
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.conv1(x)
+        out = F.relu_(out)
+
+        out = self.conv2(out)
+        out = F.relu_(out)
+
+        out = self.conv3(out)
+
+        if self.shortcut is not None:
+            shortcut = self.shortcut(x)
+        else:
+            shortcut = None
+
+        out += shortcut
+        out = F.relu_(out)
+        return out
+
+
+class BasicStem(layers.CNNBlockBase):
+    """The standard ResNet stem (layers before the first residual block)."""
+
+    def __init__(
+        self,
+        in_channels: int = 3,
+        out_channels: int = 64,
+        norm: Union[str, Callable] = 'BN'
+    ) -> None:
+        """
+        Args:
+            in_channels: Number of input channels.
+            out_channels: Number of output channels.
+            norm: Normalization for all conv layers. See :func:`get_norm` for supported format.
+        """
+        super(BasicStem, self).__init__(in_channels, out_channels, 4)
+
+        self.conv1 = layers.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False,
+            norm=layers.get_norm(norm, out_channels),
+        )
+        weight_init.caffe2_msra_init(self.conv1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.conv1(x)
+        x = F.relu_(x)
+        x = F.max_pool2d(x, kernel_size=3, stride=2, padding=1)
+        return x
+
+
+class ResNet(layers.Module):
+    """`Deep Residual Learning for Image Recognition`_.
+
+    .. _`Deep Residual Learning for Image Recognition`:
+        https://arxiv.org/abs/1512.03385
+    """
+    # Mapping depth to block class and stage blocks
     settings = {
         18: (BasicBlock, (2, 2, 2, 2)),
         34: (BasicBlock, (3, 4, 6, 3)),
-        50: (Bottleneck, (3, 4, 6, 3)),
-        101: (Bottleneck, (3, 4, 23, 3)),
-        152: (Bottleneck, (3, 8, 36, 3)),
+        50: (BottleneckBlock, (3, 4, 6, 3)),
+        101: (BottleneckBlock, (3, 4, 23, 3)),
+        152: (BottleneckBlock, (3, 8, 36, 3)),
     }
 
     def __init__(
         self,
-        depth,
-        in_channels=3,
-        stem_out_channels=64,
-        res2_out_channels=256,
-        num_classes=None,
-        out_features=('res2', 'res3', 'res4', 'res5'),
-        freeze_stages=0,
-        groups=1,
-        base_width_per_group=64,
-        norm='BN',
-        norm_eval=True,
-        is_msra=True,
-        zero_init_residual=True
-    ):
+        depth: int = 50,
+        in_channels: int = 3,
+        stem_out_channels: int = 64,
+        res2_out_channels: int = 256,
+        norm: Union[str, Callable] = 'FrozenBN',
+        num_groups: int = 1,
+        width_per_group: int = 64,
+        stride_in_1x1: bool = True,
+        res5_dilation: int = 1,
+        freeze_at: int = 2,
+        out_features: List[str] = ('res4',),
+        num_classes: Optional[int] = None,
+    ) -> None:
+        """
+        Args:
+            depth: Depth of ResNet layers, can be 18, 34, 50, 101, or 152.
+            in_channels: Number of input channels of ResNet.
+            stem_out_channels: Number of output channels of stem. For R18 and R34, this is needs to
+                be set to 64.
+            res2_out_channels: Number of output channels of res2.
+            norm: Normalization for all conv layers. See :func:`get_norm` for supported format.
+            num_groups: Number of groups, 1 -> ResNet, 2 -> ResNeXt.
+            width_per_group: Baseline width of each group.
+            stride_in_1x1: Place the stride 2 conv on the first 1x1 filter. Use True only for the
+                original MSRA ResNet; use False for C2 and Torch models.
+            res5_dilation: Apply dilation in stage 'res5'.
+            freeze_at: Freeze the first several stages so they are not trained. There are 5 stages
+                in ResNet. The first is a convolution, and the following stages are each group of
+                residual blocks.
+            out_features: List of names of the layers whose outputs should be returned in forward.
+                Can be anything in 'stem', 'linear', or 'res2' ...
+            num_classes: If None, will not perform classification. Otherwise will create a linear
+                layer.
+        """
         super(ResNet, self).__init__()
 
-        self._depth = depth
-        self._res2_out_channels = res2_out_channels
-        self._num_classes = num_classes
-        self._freeze_stages = freeze_stages
-        self._groups = groups
-        self._norm = norm
-        self._norm_eval = norm_eval
-        self._is_msra = is_msra
-        self._zero_init_residual = zero_init_residual
+        if depth in (18, 34):
+            if res2_out_channels != 64:
+                raise ValueError('Must set res2_out_channels = 64 for R18/R34')
+            if res5_dilation != 1:
+                raise ValueError('Must set res5_dilation = 1 for R18/R34')
+            if num_groups != 1:
+                raise ValueError('Must set num_groups = 1 for R18/R34')
+        if res5_dilation not in (1, 2):
+            raise ValueError('res5_dilation can only be 1 or 2. Got {}'.format(res5_dilation))
+        if len(out_features) == 0:
+            raise ValueError('Output features are empty')
 
-        # Make stem which has stride 4
-        self.stem = nn.Sequential(
-            nn.Conv2d(in_channels, stem_out_channels, 7, stride=2, padding=3, bias=False),
-            get_norm(norm, stem_out_channels),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(3, stride=2, padding=1),
-        )
+        self._out_features = out_features
+        self._num_classes = num_classes
+
+        self.stem = self.make_stem(in_channels, stem_out_channels, norm)
+        self._output_shape = {
+            'stem': layers.ShapeSpec(channels=self.stem.out_channels, stride=self.stem.stride)
+        }
 
         block_class, stage_blocks = self.settings[depth]
-        if num_classes is not None:  # Need all stages to do classification
-            max_stage = 5
-        else:
-            name_to_idx = {'stem': 1, 'res2': 2, 'res3': 3, 'res4': 4, 'res5': 5}
-            out_stages_idx = [name_to_idx[name] for name in out_features]
-            max_stage = max(out_stages_idx)
-
         in_channels = stem_out_channels
         out_channels = res2_out_channels
-        bottleneck_channels = groups * base_width_per_group
+        bottleneck_channels = num_groups * width_per_group
+        current_stride = self.stem.stride
+        current_channels = self.stem.out_channels
+        self._stage_names = []
 
-        # The residual layer in format: res<stage>, where stage has stride = 2 ** stage
-        self._res_layer_names = []
-        for idx, stage_idx in enumerate(range(2, max_stage + 1)):
-            num_blocks = stage_blocks[idx]
-            stride = 1 if idx == 0 else 2
-            dilation = 1
-            stage = self.make_stage(
-                block_class,
-                num_blocks,
-                in_channels,
-                out_channels,
-                bottleneck_channels,
-                stride=stride,
-                dilation=dilation
-            )
-            name = 'res{}'.format(stage_idx)
-            self.add_module(name, stage)
-            self._res_layer_names.append(name)
+        # Avoid creating variables without gradients
+        # It consumes extra memory and may cause all-reduce to fail
+        # For other keys, i.e. stem and linear, get a small value to avoid create stage
+        feature_to_idx = {'res2': 2, 'res3': 3, 'res4': 4, 'res5': 5}
+        out_stage_idx = [feature_to_idx.get(f, -1) for f in out_features]
+        max_stage_idx = max(out_stage_idx)
+        for idx, stage_idx in enumerate(range(2, max_stage_idx + 1)):
+            dilation = res5_dilation if stage_idx == 5 else 1
+            first_stride = 1 if stage_idx == 2 or (stage_idx == 5 and dilation == 2) else 2
+            stage_kwargs = {
+                'block_class': block_class,
+                'num_blocks': stage_blocks[idx],
+                'first_stride': first_stride,
+                'in_channels': in_channels,
+                'out_channels': out_channels,
+                'norm': norm,
+            }
+            # BottleneckBlock is used by R50/R101/R152
+            if depth in (50, 101, 152):
+                stage_kwargs['bottleneck_channels'] = bottleneck_channels
+                stage_kwargs['stride_in_1x1'] = stride_in_1x1
+                stage_kwargs['dilation'] = dilation
+                stage_kwargs['num_groups'] = num_groups
 
+            stage = self.make_stage(**stage_kwargs)
+            # Update arguments for next stage
             in_channels = out_channels
             out_channels *= 2
             bottleneck_channels *= 2
 
+            name = 'res{}'.format(stage_idx)
+            self._stage_names.append(name)
+            self.add_module(name, stage)
+            current_stride = int(current_stride * np.prod([k.stride for k in stage]))
+            current_channels = stage[-1].out_channels
+            self._output_shape[name] = layers.ShapeSpec(
+                channels=current_channels, stride=current_stride
+            )
+
         if num_classes is not None:
             self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-            self.linear = nn.Linear(out_channels, num_classes)
+            self.linear = nn.Linear(current_channels, num_classes)
 
-            out_features += ('linear',)
-
-        self._out_features = out_features
-        children_names = [x[0] for x in self.named_children()]
-        for out_feature in self._out_features:
-            if out_feature not in children_names:
-                raise ValueError('Available children: {}'.format(children_names))
-
-        self.reset_parameters()
-        self.freeze()
-
-    def make_stage(
-        self,
-        block_class,
-        num_blocks,
-        in_channels,
-        out_channels,
-        bottleneck_channels,
-        stride=1,
-        dilation=1
-    ):
-        blocks = []
-        for i in range(num_blocks):
-            stride = stride if i == 0 else 1
-            blocks.append(
-                block_class(
-                    in_channels,
-                    out_channels,
-                    bottleneck_channels,
-                    stride=stride,
-                    dilation=dilation,
-                    groups=self._groups,
-                    norm=self._norm,
-                    is_msra=self._is_msra,
-                )
-            )
-            in_channels = out_channels
-        return nn.Sequential(*blocks)
-
-    def reset_parameters(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                weight_init.kaiming_normal_init(m)
-            elif isinstance(m, (_BatchNorm, nn.GroupNorm)):
-                weight_init.constant_init(m, 1)
-
-        if self._num_classes is not None:
             # Sec 5.1 in "Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour":
             # "The 1000-way fully-connected layer is initialized by
             # drawing weights from a zero-mean Gaussian with standard deviation of 0.01."
             nn.init.normal_(self.linear.weight, std=0.01)
+            # Channels and stride are unavailable for linear layer.
+            # Add it to avoid raise KeyError when out_features has 'linear'
+            self._output_shape['linear'] = layers.ShapeSpec()
 
-        if self._zero_init_residual:
-            for m in self.modules():
-                if isinstance(m, BasicBlock):
-                    weight_init.constant_init(m.norm2, 0)
-                elif isinstance(m, Bottleneck):
-                    weight_init.constant_init(m.norm3, 0)
+        children = [x[0] for x in self.named_children()]
+        for out_feature in self._out_features:
+            if out_feature not in children:
+                raise ValueError('Available children: {}'.format(', '.join(children)))
 
-    def freeze(self):
-        if self._freeze_stages >= 1:
-            self.stem.eval()
-            for p in self.stem.parameters():
-                p.requires_grad = False
+        self.freeze(freeze_at)
 
-        if self._freeze_stages >= 2:
-            for stage_idx in range(2, self._freeze_stages + 1):
-                m = getattr(self, 'res{}'.format(stage_idx))
-                m.eval()
-                for p in m.parameters():
-                    p.requires_grad = False
+    @classmethod
+    def make_stem(
+        cls, in_channels: int, out_channels: int, norm: Union[str, Callable]
+    ) -> layers.CNNBlockBase:
+        return BasicStem(in_channels, out_channels, norm)
 
-    def forward(self, x):
-        """
-        Args:
-            x (Tensor[N, C, H, W]): Input tensor.
+    @classmethod
+    def make_stage(
+        cls,
+        block_class: Type[Union[BasicBlock, BottleneckBlock]],
+        num_blocks: int,
+        first_stride: int,
+        *,
+        in_channels: int,
+        out_channels: int,
+        **kwargs: Any,
+    ) -> nn.Sequential:
+        if 'stride' in kwargs:
+            raise ValueError('Stride of blocks in make_stage cannot be changed.')
 
-        Returns:
-            tuple[Tensor]: Tuple of feature map tensor in high to low resolution order.
-        """
-        outputs = []
+        blocks = []
+        for i in range(num_blocks):
+            blocks.append(
+                block_class(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    stride=first_stride if i == 0 else 1,
+                    **kwargs,
+                )
+            )
+            assert isinstance(blocks[-1], layers.CNNBlockBase), blocks[-1]
+            in_channels = out_channels
+        assert len(blocks) > 0
+        return nn.Sequential(*blocks)
+
+    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+        outputs = {}
         x = self.stem(x)
         if 'stem' in self._out_features:
-            outputs.append(x)
-
-        for name in self._res_layer_names:
-            stage = getattr(self, name)
-            x = stage(x)
+            outputs['stem'] = x
+        for name in self._stage_names:
+            x = getattr(self, name)(x)
             if name in self._out_features:
-                outputs.append(x)
+                outputs[name] = x
 
         if self._num_classes is not None:
             x = self.avgpool(x)
+            x = torch.flatten(x, 1)
             x = self.linear(x)
-            outputs.append(x)
+            if 'linear' in self._out_features:
+                outputs['linear'] = x
 
-        return tuple(outputs)
+        return outputs
 
-    def train(self, mode=True):
-        super(ResNet, self).train(mode)
-        self.freeze()
+    def freeze(self, freeze_at: int = 0) -> None:
+        """Freezes the first several stages of the ResNet. Commonly used in fine-tuning.
 
-        if mode and self._norm_eval:
-            for m in self.modules():
-                # trick: eval have effect on BatchNorm only
-                if isinstance(m, _BatchNorm):
-                    m.eval()
+        Layers that produce the same feature map spatial size are defined as one "stage" by
+        `Feature Pyramid Networks for Object Detection`_.
+
+        Args:
+            freeze_at: Number of stages to freeze. `1` means freezing the stem. `2` means freezing
+                the stem and one residual stage, etc.
+
+        _`Feature Pyramid Networks for Object Detection`:
+            https://arxiv.org/abs/1612.03144
+        """
+        if freeze_at >= 1:
+            self.stem.freeze()
+        for idx, stage_name in enumerate(self._stage_names, start=2):
+            if freeze_at >= idx:
+                for block in getattr(self, stage_name):
+                    block.freeze()
+
+    @property
+    def output_shape(self) -> Dict[str, ShapeSpec]:
+        return {name: self._output_shape[name] for name in self._out_features}
