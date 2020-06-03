@@ -438,7 +438,7 @@ class ResNet(layers.Module):
     def freeze(self, freeze_at: int = 0) -> None:
         """Freezes the first several stages of the ResNet. Commonly used in fine-tuning.
 
-        Layers that produce the same feature map spatial size are defined as one "stage" by
+        Layers that produce the same feature map spatial size are defined as one 'stage' by
         `Feature Pyramid Networks for Object Detection`_.
 
         Args:
