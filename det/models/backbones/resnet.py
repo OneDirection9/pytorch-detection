@@ -10,6 +10,7 @@ from torch.nn import functional as F
 
 from det import layers
 from det.layers import ShapeSpec
+from .build import BackboneRegistry
 
 __all__ = ['BasicBlock', 'BottleneckBlock', 'BasicStem', 'ResNet']
 
@@ -242,6 +243,7 @@ class BasicStem(layers.CNNBlockBase):
         return x
 
 
+@BackboneRegistry.register('ResNet')
 class ResNet(layers.Module):
     """`Deep Residual Learning for Image Recognition`_.
 
