@@ -10,7 +10,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from det import layers
-from det.layers import ShapeSpec
+from ..shape_spec import ShapeSpec
 from .base import Backbone, BackboneRegistry
 
 __all__ = [
@@ -128,7 +128,7 @@ class BottleneckBlock(layers.CNNBlockBase):
         Args:
             in_channels: Number of input channels.
             out_channels: Number of output channels.
-            bottleneck_channels: Number of output channels for the 3x3 'bottleneck' conv layers.
+            bottleneck_channels: Number of output channels for the 3x3 "bottleneck" conv layers.
             stride: Stride of the first conv.
             num_groups: Number of groups for the 3x3 conv layer.
             norm: Normalization for all conv layers. See :func:`get_norm` for supported format.
@@ -210,7 +210,7 @@ class BottleneckBlock(layers.CNNBlockBase):
         if self.shortcut is not None:
             shortcut = self.shortcut(x)
         else:
-            shortcut = None
+            shortcut = x
 
         out += shortcut
         out = F.relu_(out)
@@ -294,29 +294,24 @@ class ResNet(Backbone):
 
         name = 'stem'
         self.add_module(name, stem)
-
         current_channels = self.stem.out_channels
         current_stride = self.stem.stride
-        self._output_shape = {
-            name: layers.ShapeSpec(channels=current_channels, stride=current_stride)
-        }
+        self._output_shape = {name: ShapeSpec(channels=current_channels, stride=current_stride)}
 
         self._stage_names = []
         for i, stage in enumerate(stages, start=2):
             if len(stage) == 0:
                 raise ValueError('Stage is empty')
-            if not all([isinstance(block, layers.CNNBlockBase) for block in stage]):
-                raise TypeError('Stage should be list of CNNBlockBase')
+            for block in stage:
+                if not isinstance(block, layers.CNNBlockBase):
+                    raise TypeError('Block should be CNNBlockBase. Got {}'.format(type(block)))
 
             name = 'res{}'.format(i)
             self.add_module(name, stage)
             self._stage_names.append(name)
-
             current_channels = stage[-1].out_channels
             current_stride = current_stride * np.prod([b.stride for b in stage])
-            self._output_shape[name] = layers.ShapeSpec(
-                channels=current_channels, stride=current_stride
-            )
+            self._output_shape[name] = ShapeSpec(channels=current_channels, stride=current_stride)
 
         if num_classes is not None:
             self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
@@ -374,7 +369,7 @@ class ResNet(Backbone):
                 this stage. A module of this type must not change spatial resolution of inputs
                 unless its stride != 1.
             num_blocks: Number of blocks in this stage.
-            first_stride: The stride of the first block. The other blocks will have strde=1.
+            first_stride: The stride of the first block. The other blocks will have stride=1.
             in_channels: Input channels of the entire stage.
             out_channels: Output channels of **every block** in the stage.
             **kwargs: Other arguments passed to the constructor of `block_class`.
@@ -427,7 +422,7 @@ class ResNet(Backbone):
         return {name: self._output_shape[name] for name in self._out_features}
 
 
-@BackboneRegistry.register('ResNetBackbone')
+@BackboneRegistry.register('ResNet_Backbone')
 def build_resnet_backbone(
     depth: int = 50,
     in_channels: int = 3,
@@ -454,7 +449,7 @@ def build_resnet_backbone(
         width_per_group: Baseline width of each group.
         stride_in_1x1: Place the stride 2 conv on the first 1x1 filter. Use True only for the
             original MSRA ResNet; use False for C2 and Torch models.
-        res5_dilation: Apply dilation in stage 'res5'.
+        res5_dilation: Apply dilation in stage "res5".
         freeze_at: Freeze the first several stages so they are not trained. There are 5 stages in
             ResNet. The first is a convolution, and the following stages are each group of residual
             blocks.
