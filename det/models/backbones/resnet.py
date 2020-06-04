@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
+import logging
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import numpy as np
@@ -10,9 +11,17 @@ from torch.nn import functional as F
 
 from det import layers
 from det.layers import ShapeSpec
-from .build import BackboneRegistry
+from .base import Backbone, BackboneRegistry
 
-__all__ = ['BasicBlock', 'BottleneckBlock', 'BasicStem', 'ResNet']
+__all__ = [
+    'BasicBlock',
+    'BottleneckBlock',
+    'BasicStem',
+    'ResNet',
+    'build_resnet_backbone',
+]
+
+logger = logging.getLogger(__name__)
 
 
 class BasicBlock(layers.CNNBlockBase):
@@ -243,8 +252,7 @@ class BasicStem(layers.CNNBlockBase):
         return x
 
 
-@BackboneRegistry.register('ResNet')
-class ResNet(layers.Module):
+class ResNet(Backbone):
     """`Deep Residual Learning for Image Recognition`_.
 
     .. _`Deep Residual Learning for Image Recognition`:
@@ -261,105 +269,51 @@ class ResNet(layers.Module):
 
     def __init__(
         self,
-        depth: int = 50,
-        in_channels: int = 3,
-        stem_out_channels: int = 64,
-        res2_out_channels: int = 256,
-        norm: Union[str, Callable] = 'FrozenBN',
-        num_groups: int = 1,
-        width_per_group: int = 64,
-        stride_in_1x1: bool = True,
-        res5_dilation: int = 1,
-        freeze_at: int = 2,
-        out_features: List[str] = ('res4',),
+        stem: layers.CNNBlockBase,
+        stages: List[nn.Sequential],
         num_classes: Optional[int] = None,
+        out_features: Optional[List[str]] = None,
     ) -> None:
         """
         Args:
-            depth: Depth of ResNet layers, can be 18, 34, 50, 101, or 152.
-            in_channels: Number of input channels of ResNet.
-            stem_out_channels: Number of output channels of stem. For R18 and R34, this is needs to
-                be set to 64.
-            res2_out_channels: Number of output channels of res2.
-            norm: Normalization for all conv layers. See :func:`get_norm` for supported format.
-            num_groups: Number of groups, 1 -> ResNet, 2 -> ResNeXt.
-            width_per_group: Baseline width of each group.
-            stride_in_1x1: Place the stride 2 conv on the first 1x1 filter. Use True only for the
-                original MSRA ResNet; use False for C2 and Torch models.
-            res5_dilation: Apply dilation in stage 'res5'.
-            freeze_at: Freeze the first several stages so they are not trained. There are 5 stages
-                in ResNet. The first is a convolution, and the following stages are each group of
-                residual blocks.
-            out_features: List of names of the layers whose outputs should be returned in forward.
-                Can be anything in 'stem', 'linear', or 'res2' ...
-            num_classes: If None, will not perform classification. Otherwise will create a linear
+            stem: A stem module.
+            stages: Several (typically 4) stages, each contains a nn.Sequential of
+                :class:`CNNBlockBase`.
+            num_classes: If None, will not perform classification. Otherwise, will create a linear
                 layer.
+            out_features: Name of the layers whose outputs should be returned in forward. Can be
+                anything in "stem", "linear", or "res2" ... If None, will return the output of the
+                last layer.
         """
         super(ResNet, self).__init__()
 
-        if depth in (18, 34):
-            if res2_out_channels != 64:
-                raise ValueError('Must set res2_out_channels = 64 for R18/R34')
-            if res5_dilation != 1:
-                raise ValueError('Must set res5_dilation = 1 for R18/R34')
-            if num_groups != 1:
-                raise ValueError('Must set num_groups = 1 for R18/R34')
-        if res5_dilation not in (1, 2):
-            raise ValueError('res5_dilation can only be 1 or 2. Got {}'.format(res5_dilation))
-        if len(out_features) == 0:
-            raise ValueError('Output features are empty')
+        if len(stages) == 0:
+            logger.warning('None residual stages provided. Maybe something wrong!')
 
-        self._out_features = out_features
         self._num_classes = num_classes
 
-        self.stem = self.make_stem(in_channels, stem_out_channels, norm)
+        name = 'stem'
+        self.add_module(name, stem)
+
+        current_channels = self.stem.out_channels
+        current_stride = self.stem.stride
         self._output_shape = {
-            'stem': layers.ShapeSpec(channels=self.stem.out_channels, stride=self.stem.stride)
+            name: layers.ShapeSpec(channels=current_channels, stride=current_stride)
         }
 
-        block_class, stage_blocks = self.settings[depth]
-        in_channels = stem_out_channels
-        out_channels = res2_out_channels
-        bottleneck_channels = num_groups * width_per_group
-        current_stride = self.stem.stride
-        current_channels = self.stem.out_channels
         self._stage_names = []
+        for i, stage in enumerate(stages, start=2):
+            if len(stage) == 0:
+                raise ValueError('Stage is empty')
+            if not all([isinstance(block, layers.CNNBlockBase) for block in stage]):
+                raise TypeError('Stage should be list of CNNBlockBase')
 
-        # Avoid creating variables without gradients
-        # It consumes extra memory and may cause all-reduce to fail
-        # For other keys, i.e. stem and linear, get a small value to avoid create stage
-        feature_to_idx = {'res2': 2, 'res3': 3, 'res4': 4, 'res5': 5}
-        out_stage_idx = [feature_to_idx.get(f, -1) for f in out_features]
-        max_stage_idx = max(out_stage_idx)
-        for idx, stage_idx in enumerate(range(2, max_stage_idx + 1)):
-            dilation = res5_dilation if stage_idx == 5 else 1
-            first_stride = 1 if stage_idx == 2 or (stage_idx == 5 and dilation == 2) else 2
-            stage_kwargs = {
-                'block_class': block_class,
-                'num_blocks': stage_blocks[idx],
-                'first_stride': first_stride,
-                'in_channels': in_channels,
-                'out_channels': out_channels,
-                'norm': norm,
-            }
-            # BottleneckBlock is used by R50/R101/R152
-            if depth in (50, 101, 152):
-                stage_kwargs['bottleneck_channels'] = bottleneck_channels
-                stage_kwargs['stride_in_1x1'] = stride_in_1x1
-                stage_kwargs['dilation'] = dilation
-                stage_kwargs['num_groups'] = num_groups
-
-            stage = self.make_stage(**stage_kwargs)
-            # Update arguments for next stage
-            in_channels = out_channels
-            out_channels *= 2
-            bottleneck_channels *= 2
-
-            name = 'res{}'.format(stage_idx)
-            self._stage_names.append(name)
+            name = 'res{}'.format(i)
             self.add_module(name, stage)
-            current_stride = int(current_stride * np.prod([k.stride for k in stage]))
+            self._stage_names.append(name)
+
             current_channels = stage[-1].out_channels
+            current_stride = current_stride * np.prod([b.stride for b in stage])
             self._output_shape[name] = layers.ShapeSpec(
                 channels=current_channels, stride=current_stride
             )
@@ -372,22 +326,36 @@ class ResNet(layers.Module):
             # "The 1000-way fully-connected layer is initialized by
             # drawing weights from a zero-mean Gaussian with standard deviation of 0.01."
             nn.init.normal_(self.linear.weight, std=0.01)
-            # Channels and stride are unavailable for linear layer.
-            # Add it to avoid raise KeyError when out_features has 'linear'
-            self._output_shape['linear'] = layers.ShapeSpec()
+            name = 'linear'
+
+        if out_features is None:
+            out_features = [name]
+        self._out_features = out_features
+        assert len(self._out_features) != 0
 
         children = [x[0] for x in self.named_children()]
         for out_feature in self._out_features:
-            if out_feature not in children:
-                raise ValueError('Available children: {}'.format(', '.join(children)))
+            assert out_feature in children, 'Available children: {}'.format(', '.format(children))
 
-        self.freeze(freeze_at)
+    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+        outputs = {}
+        x = self.stem(x)
+        if 'stem' in self._out_features:
+            outputs['stem'] = x
 
-    @classmethod
-    def make_stem(
-        cls, in_channels: int, out_channels: int, norm: Union[str, Callable]
-    ) -> layers.CNNBlockBase:
-        return BasicStem(in_channels, out_channels, norm)
+        for stage_name in self._stage_names:
+            x = getattr(self, stage_name)(x)
+            if stage_name in self._out_features:
+                outputs[stage_name] = x
+
+        if self._num_classes is not None:
+            x = self.avgpool(x)
+            x = torch.flatten(x, 1)
+            x = self.linear(x)
+            if 'linear' in self._out_features:
+                outputs['linear'] = x
+
+        return outputs
 
     @classmethod
     def make_stage(
@@ -400,6 +368,20 @@ class ResNet(layers.Module):
         out_channels: int,
         **kwargs: Any,
     ) -> nn.Sequential:
+        """
+        Args:
+            block_class: A subclass of :class:`CNNBlockBase` that's used to create all blocks in
+                this stage. A module of this type must not change spatial resolution of inputs
+                unless its stride != 1.
+            num_blocks: Number of blocks in this stage.
+            first_stride: The stride of the first block. The other blocks will have strde=1.
+            in_channels: Input channels of the entire stage.
+            out_channels: Output channels of **every block** in the stage.
+            **kwargs: Other arguments passed to the constructor of `block_class`.
+
+        Returns:
+            nn.Sequential: List of blocks.
+        """
         if 'stride' in kwargs:
             raise ValueError('Stride of blocks in make_stage cannot be changed.')
 
@@ -413,31 +395,10 @@ class ResNet(layers.Module):
                     **kwargs,
                 )
             )
-            assert isinstance(blocks[-1], layers.CNNBlockBase), blocks[-1]
             in_channels = out_channels
-        assert len(blocks) > 0
         return nn.Sequential(*blocks)
 
-    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
-        outputs = {}
-        x = self.stem(x)
-        if 'stem' in self._out_features:
-            outputs['stem'] = x
-        for name in self._stage_names:
-            x = getattr(self, name)(x)
-            if name in self._out_features:
-                outputs[name] = x
-
-        if self._num_classes is not None:
-            x = self.avgpool(x)
-            x = torch.flatten(x, 1)
-            x = self.linear(x)
-            if 'linear' in self._out_features:
-                outputs['linear'] = x
-
-        return outputs
-
-    def freeze(self, freeze_at: int = 0) -> None:
+    def freeze(self, freeze_at: int = 0) -> 'ResNet':
         """Freezes the first several stages of the ResNet. Commonly used in fine-tuning.
 
         Layers that produce the same feature map spatial size are defined as one 'stage' by
@@ -446,6 +407,9 @@ class ResNet(layers.Module):
         Args:
             freeze_at: Number of stages to freeze. `1` means freezing the stem. `2` means freezing
                 the stem and one residual stage, etc.
+
+        Returns:
+            This module itself
 
         _`Feature Pyramid Networks for Object Detection`:
             https://arxiv.org/abs/1612.03144
@@ -456,7 +420,95 @@ class ResNet(layers.Module):
             if freeze_at >= idx:
                 for block in getattr(self, stage_name):
                     block.freeze()
+        return self
 
     @property
     def output_shape(self) -> Dict[str, ShapeSpec]:
         return {name: self._output_shape[name] for name in self._out_features}
+
+
+@BackboneRegistry.register('ResNetBackbone')
+def build_resnet_backbone(
+    depth: int = 50,
+    in_channels: int = 3,
+    stem_out_channels: int = 64,
+    res2_out_channels: int = 256,
+    norm: Union[str, Callable] = 'FrozenBN',
+    num_groups: int = 1,
+    width_per_group: int = 64,
+    stride_in_1x1: bool = True,
+    res5_dilation: int = 1,
+    freeze_at: int = 2,
+    out_features: List[str] = ('res4',),
+    num_classes: Optional[int] = None,
+) -> ResNet:
+    """
+    Args:
+        depth: Depth of ResNet layers, can be 18, 34, 50, 101, or 152.
+        in_channels: Number of input channels of ResNet.
+        stem_out_channels: Number of output channels of stem. For R18 and R34, this is needs to be
+            set to 64.
+        res2_out_channels: Number of output channels of res2.
+        norm: Normalization for all conv layers. See :func:`get_norm` for supported format.
+        num_groups: Number of groups, 1 -> ResNet, 2 -> ResNeXt.
+        width_per_group: Baseline width of each group.
+        stride_in_1x1: Place the stride 2 conv on the first 1x1 filter. Use True only for the
+            original MSRA ResNet; use False for C2 and Torch models.
+        res5_dilation: Apply dilation in stage 'res5'.
+        freeze_at: Freeze the first several stages so they are not trained. There are 5 stages in
+            ResNet. The first is a convolution, and the following stages are each group of residual
+            blocks.
+        num_classes: See :class:`ResNet`.
+        out_features: See :class:`ResNet.
+    """
+    if res5_dilation not in (1, 2):
+        raise ValueError('res5_dilation can only be 1 or 2. Got {}'.format(res5_dilation))
+    if depth in (18, 34):
+        if res2_out_channels != 64:
+            raise ValueError('Must set res2_out_channels = 64 for R18/R34')
+        if res5_dilation != 1:
+            raise ValueError('Must set res5_dilation = 1 for R18/R34')
+        if num_groups != 1:
+            raise ValueError('Must set num_groups = 1 for R18/R34')
+
+    block_class, stage_blocks = ResNet.settings[depth]
+
+    stem = BasicStem(in_channels, stem_out_channels, norm)
+
+    in_channels = stem_out_channels
+    out_channels = res2_out_channels
+    bottleneck_channels = num_groups * width_per_group
+
+    stages = []
+
+    # Avoid creating variables without gradients
+    # It consumes extra memory and may cause all-reduce to fail
+    feature_to_idx = {'res2': 2, 'res3': 3, 'res4': 4, 'res5': 5}
+    out_stage_idx = [feature_to_idx.get(f, -1) for f in out_features]
+    max_stage_idx = max(out_stage_idx)
+    for idx, stage_idx in enumerate(range(2, max_stage_idx + 1)):
+        dilation = res5_dilation if stage_idx == 5 else 1
+        first_stride = 1 if stage_idx == 2 or (stage_idx == 5 and dilation == 2) else 2
+        stage_kwargs = {
+            'block_class': block_class,
+            'num_blocks': stage_blocks[idx],
+            'first_stride': first_stride,
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'norm': norm,
+        }
+        # BottleneckBlock is used by R50/R101/R152
+        if depth in (50, 101, 152):
+            stage_kwargs['bottleneck_channels'] = bottleneck_channels
+            stage_kwargs['stride_in_1x1'] = stride_in_1x1
+            stage_kwargs['dilation'] = dilation
+            stage_kwargs['num_groups'] = num_groups
+
+        stage = ResNet.make_stage(**stage_kwargs)
+        stages.append(stage)
+        # Update arguments for next stage
+        in_channels = out_channels
+        out_channels *= 2
+        bottleneck_channels *= 2
+
+    return ResNet(stem, stages, num_classes, out_features).freeze(freeze_at)

@@ -12,7 +12,6 @@ The workflow of data is:
 """
 from __future__ import absolute_import, division, print_function
 
-import copy
 import itertools
 import logging
 import operator
@@ -222,7 +221,6 @@ def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
     Args:
         cfg: Config which loads from a .yaml file.
     """
-    cfg = copy.deepcopy(cfg)
     dataset = build_pytorch_dataset(cfg['data']['train'])
 
     dl_cfg = cfg['dataloader']['train']
