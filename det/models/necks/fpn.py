@@ -192,6 +192,17 @@ def build_rcnn_fpn_neck(
     norm: Union[str, Callable] = '',
     fuse_type: str = 'sum',
 ) -> FPN:
+    """
+    Args:
+        input_shape: Get from backbone module. Don't need specify explicitly.
+        in_features:
+        out_channels:
+        norm:
+        fuse_type:
+
+    Returns:
+        nn.Module: FPN neck with top_block is LastLevelMaxPool.
+    """
     in_channels = [input_shape[f].channels for f in in_features]
     in_strides = [input_shape[f].stride for f in in_features]
     top_block = LastLevelMaxPool()
@@ -207,6 +218,17 @@ def build_retinanet_fpn_neck(
     norm: Union[str, Callable] = '',
     fuse_type: str = 'sum',
 ) -> FPN:
+    """
+    Args:
+        input_shape: Get from backbone module. Don't need specify explicitly.
+        in_features:
+        out_channels:
+        norm:
+        fuse_type:
+
+    Returns:
+        nn.Module: FPN neck with top_block is LastLevelP6P7.
+    """
     in_channels = [input_shape[f].channels for f in in_features]
     in_strides = [input_shape[f].stride for f in in_features]
     top_block = LastLevelP6P7(input_shape['res5'], out_channels, 'res5')
