@@ -13,13 +13,13 @@ from foundation.common.timer import Timer
 from pycocotools.coco import COCO
 
 from det.structures import BoxMode
-from .base import VisionDataset, VisionDatasetRegistry
 from .metadata import (
     Metadata,
     get_coco_instance_metadata,
     get_coco_panoptic_metadata,
     get_coco_person_metadata,
 )
+from .registry import VisionDataset, VisionDatasetRegistry
 
 __all__ = ['COCODataset']
 

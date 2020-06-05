@@ -4,10 +4,10 @@ from torch import nn
 
 from .norm import FrozenBatchNorm2d
 
-__all__ = ['CNNBlockBase']
+__all__ = ['BaseCNNBlock']
 
 
-class CNNBlockBase(nn.Module):
+class BaseCNNBlock(nn.Module):
     """A CNN block is assumed to have input channels, output channels and a stride.
 
     The input and output of `forward()` method must be NCHW tensors.
@@ -27,13 +27,13 @@ class CNNBlockBase(nn.Module):
             out_channels:
             stride:
         """
-        super(CNNBlockBase, self).__init__()
+        super(BaseCNNBlock, self).__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.stride = stride
 
-    def freeze(self) -> 'CNNBlockBase':
+    def freeze(self) -> 'BaseCNNBlock':
         """Makes this block not trainable.
 
         This method sets all parameters to `requires_grad=False`, and convert all BatchNorm layers

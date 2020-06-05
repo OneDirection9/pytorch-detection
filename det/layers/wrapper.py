@@ -1,9 +1,13 @@
 from __future__ import absolute_import, division, print_function
 
+from abc import ABCMeta, abstractmethod
+from collections import namedtuple
+from typing import Any, Dict, Optional
+
 import torch
 from torch import nn
 
-__all__ = ['Conv2d']
+__all__ = ['Conv2d', 'ShapeSpec', 'BaseModule']
 
 
 class Conv2d(nn.Conv2d):
@@ -37,3 +41,56 @@ class Conv2d(nn.Conv2d):
         if self.activation is not None:
             x = self.activation(x)
         return x
+
+
+class ShapeSpec(namedtuple('_ShapeSpec', ['channels', 'height', 'width', 'stride'])):
+    """A simple structure that contains basic shape specification about a tensor.
+
+    It is often used as the auxiliary inputs/outputs of models, to obtain the shape inference
+    ability among PyTorch modules.
+
+    Attributes:
+        channels (int):
+        height (int):
+        width (int):
+        stride (int):
+    """
+
+    def __new__(
+        cls,
+        *,
+        channels: Optional[int] = None,
+        height: Optional[int] = None,
+        width: Optional[int] = None,
+        stride: Optional[int] = None,
+    ) -> 'ShapeSpec':
+        return super(ShapeSpec, cls).__new__(cls, channels, height, width, stride)
+
+
+class BaseModule(nn.Module, metaclass=ABCMeta):
+    """Abstract base class for backbone, neck, and so on."""
+
+    @abstractmethod
+    def forward(self, *input: Any) -> Dict[str, torch.Tensor]:
+        """Subclasses must override this method, but adhere to the same return type.
+
+        Returns:
+            dict[str->Tensor]: Mapping from feature name (e.g., "res2") to tensor
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def output_shape(self) -> Dict[str, ShapeSpec]:
+        pass
+
+    @property
+    def size_divisibility(self):
+        """
+        Some backbones require the input height and width to be divisible by a
+        specific integer. This is typically true for encoder / decoder type networks
+        with lateral connection (e.g., FPN) for which feature maps need to match
+        dimension in the "bottom up" and "top down" paths. Set to 0 if no specific
+        input size divisibility is required.
+        """
+        return 0

@@ -9,15 +9,12 @@ from torch import nn
 from torch.nn import functional as F
 
 from det import layers
-from ..shape_spec import ShapeSpec
-from .base import Neck, NeckRegistry
+from .registry import NeckRegistry
 
 __all__ = [
     'LastLevelMaxPool',
     'LastLevelP6P7',
     'FPN',
-    'build_rcnn_fpn_neck',
-    'build_retinanet_fpn_neck',
 ]
 
 
@@ -54,7 +51,8 @@ class LastLevelP6P7(nn.Module):
         return [p6, p7]
 
 
-class FPN(Neck):
+@NeckRegistry.register('FPN')
+class FPN(layers.BaseModule):
     """`Feature Pyramid Networks for Object Detection`_.
 
     .._`Feature Pyramid Networks for Object Detection`:
@@ -63,19 +61,16 @@ class FPN(Neck):
 
     def __init__(
         self,
-        in_channels: List[int],
-        in_strides: List[int],
-        in_features: List[str],
+        input_shape: Dict[str, layers.ShapeSpec],
+        in_features: List[str] = ('res2', 'res3', 'res4', 'res5'),
         out_channels: int = 256,
         norm: Union[str, Callable] = '',
-        top_block: Optional[nn.Module] = None,
         fuse_type: str = 'sum',
+        top_block: Optional[nn.Module] = None,
     ) -> None:
         """
         Args:
-            in_channels: List of input channels per scale.
-            in_strides: List of input strides per scale. Each stride should be 2x times its
-                preceding stride.
+            input_shape: Mapping from feature name (e.g. "res2") to feature map shape.
             in_features: Name of the input feature maps coming from the backbone to which FPN is
                 attached. For example, if the backbone produces ["res2", "res3", "res4"], any
                 *contiguous* sublist of these may be used; order must be from high to low
@@ -83,28 +78,23 @@ class FPN(Neck):
             out_channels: Number of channels in the output feature maps.
             norm: Normalization for lateral and output conv layers. See :func:`get_norm` for
                 supported format.
+            fuse_type (str): Types for fusing the top down features and the lateral ones. It can be
+                "sum" (default), which sums up element-wise; or "avg", which takes the element-wise
+                mean of the two.
             top_block: If provided, an extra operation will be performed on the last output of the
                 bottom-up features or FPN output (smallest resolution), and the result will extend
                 the result list. The top_block further downsamples the feature map. It must
                 have an attribute "num_levels", meaning the number of extra FPN levels added by
                 this block, and "in_features", which is a string representing its input feature
-                (e.g., p5 or res5).
-            fuse_type (str): Types for fusing the top down features and the lateral ones. It can be
-                "sum" (default), which sums up element-wise; or "avg", which takes the element-wise
-                mean of the two.
+                (e.g., p5 or res5). Usually use a wrapper that create top_block and pass it to FPN.
         """
         super(FPN, self).__init__()
 
-        if not (len(in_strides) == len(in_channels) == len(in_features)):
-            raise ValueError('in_strides, in_channels, and in_features must have the same length')
         if fuse_type not in ['avg', 'sum']:
             raise ValueError('fuse_type should be either avg or sum. Got {}'.format(fuse_type))
-        # Check that each stride is 2x times its preceding stride, i.e. "contiguous in log2"
-        for i, stride in enumerate(in_strides[1:], 1):
-            if stride != 2 * in_strides[i - 1]:
-                raise ValueError(
-                    'Strides {} {} are not log2 contiguous'.format(stride, in_strides[i - 1])
-                )
+
+        in_channels = [input_shape[f].channels for f in in_features]
+        in_strides = [input_shape[f].stride for f in in_features]
 
         self._size_divisibility = in_strides[-1]
         self._in_features = in_features
@@ -113,9 +103,11 @@ class FPN(Neck):
         self.lateral_convs = nn.ModuleList()
         self.output_convs = nn.ModuleList()
         self.top_block = top_block
+        self._out_features = []
+        self._output_shape = {}
 
         use_bias = norm == ''
-        for idx, channels in enumerate(in_channels):
+        for stride, channels in zip(in_strides, in_channels):
             lateral_norm = layers.get_norm(norm, out_channels)
             output_norm = layers.get_norm(norm, out_channels)
 
@@ -136,35 +128,35 @@ class FPN(Neck):
             self.lateral_convs.append(lateral_conv)
             self.output_convs.append(output_conv)
 
-        self._output_shape = {}
-        self._out_features = []
-        for stride in in_strides:
             name = 'p{}'.format(int(math.log2(stride)))
-            self._output_shape[name] = ShapeSpec(channels=out_channels, stride=stride)
             self._out_features.append(name)
+            self._output_shape[name] = layers.ShapeSpec(channels=out_channels, stride=stride)
 
         if self.top_block is not None:
             stage = int(math.log2(in_strides[-1])) + 1
             for s in range(stage, stage + self.top_block.num_levels):
                 name = 'p{}'.format(s)
-                self._output_shape[name] = ShapeSpec(channels=out_channels, stride=2 ** s)
                 self._out_features.append(name)
+                self._output_shape[name] = layers.ShapeSpec(channels=out_channels, stride=2 ** s)
 
     def forward(self, bottom_up_features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        x = [bottom_up_features[f] for f in self._in_features]
-
         # Build laterals
-        x = [lateral_conv(x[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+        laterals = [
+            lateral_conv(bottom_up_features[feature])
+            for feature, lateral_conv in zip(self._in_features, self.lateral_convs)
+        ]
 
         # Build top-down path
         for i in range(len(self.lateral_convs) - 1, 0, -1):
-            x[i - 1] += F.interpolate(x[i], scale_factor=2, mode='nearest')
+            laterals[i - 1] += F.interpolate(laterals[i], scale_factor=2, mode='nearest')
             if self._fuse_type == 'avg':
-                x[i - 1] /= 2
+                laterals[i - 1] /= 2
 
         # Build output
         # part1: from original levels
-        outputs = [output_conv(x[i]) for i, output_conv in enumerate(self.output_convs)]
+        outputs = [
+            output_conv(lateral) for lateral, output_conv in zip(laterals, self.output_convs)
+        ]
         # part2: from top_block
         if self.top_block is not None:
             top_block_in_feature = bottom_up_features.get(self.top_block.in_feature, None)
@@ -176,7 +168,7 @@ class FPN(Neck):
         return dict(zip(self._out_features, outputs))
 
     @property
-    def output_shape(self) -> Dict[str, ShapeSpec]:
+    def output_shape(self) -> Dict[str, layers.ShapeSpec]:
         return self._output_shape
 
     @property
@@ -184,53 +176,29 @@ class FPN(Neck):
         return self._size_divisibility
 
 
-@NeckRegistry.register('RCNN_FPN_Neck')
-def build_rcnn_fpn_neck(
-    input_shape: Dict[str, ShapeSpec],
-    in_features: List[str] = ('res2', 'res3', 'res4', 'res5'),
-    out_channels: int = 256,
-    norm: Union[str, Callable] = '',
-    fuse_type: str = 'sum',
-) -> FPN:
-    """
-    Args:
-        input_shape: Get from backbone module. Don't need specify explicitly.
-        in_features:
-        out_channels:
-        norm:
-        fuse_type:
+def _assert_strides_are_log2_contiguous(strides: List[int]) -> None:
+    """Checks that each stride is 2x times its preceding stride, i.e. "contiguous in log2"."""
+    for i, stride in enumerate(strides[1:], 1):
+        if stride != 2 * strides[i - 1]:
+            raise ValueError('Strides {} {} are not log2 contiguous'.format(stride, strides[i - 1]))
 
-    Returns:
-        nn.Module: FPN neck with top_block is LastLevelMaxPool.
-    """
-    in_channels = [input_shape[f].channels for f in in_features]
-    in_strides = [input_shape[f].stride for f in in_features]
-    top_block = LastLevelMaxPool()
 
-    return FPN(in_channels, in_strides, in_features, out_channels, norm, top_block, fuse_type)
+# Presetting top_block
+NeckRegistry.register_partial('RCNN_FPN_Neck', top_block=LastLevelMaxPool())(FPN)
 
 
 @NeckRegistry.register('RetinaNet_FPN_Neck')
-def build_retinanet_fpn_neck(
-    input_shape: Dict[str, ShapeSpec],
-    in_features: List[str] = ('res2', 'res3', 'res4', 'res5'),
-    out_channels: int = 256,
-    norm: Union[str, Callable] = '',
-    fuse_type: str = 'sum',
-) -> FPN:
-    """
-    Args:
-        input_shape: Get from backbone module. Don't need specify explicitly.
-        in_features:
-        out_channels:
-        norm:
-        fuse_type:
+def build_retinanet_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs):
+    """See :class:`FPN`.
 
     Returns:
         nn.Module: FPN neck with top_block is LastLevelP6P7.
     """
-    in_channels = [input_shape[f].channels for f in in_features]
-    in_strides = [input_shape[f].stride for f in in_features]
-    top_block = LastLevelP6P7(input_shape['res5'], out_channels, 'res5')
-
-    return FPN(in_channels, in_strides, in_features, out_channels, norm, top_block, fuse_type)
+    assert 'top_block' not in kwargs
+    # TODO: consider using inspect.signature to extract arguments automatically
+    # import inspect
+    # sig = inspect.signature(FPN.__init__)
+    # out_channels = kwargs.get('out_channels', sig.parameters['out_channels'].default)
+    out_channels = kwargs.get('out_channels', 256)
+    top_block = LastLevelP6P7(input_shape['res5'].channels, out_channels, 'res5')
+    return FPN(input_shape, **kwargs, top_block=top_block)

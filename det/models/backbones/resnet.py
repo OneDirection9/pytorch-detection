@@ -10,8 +10,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from det import layers
-from ..shape_spec import ShapeSpec
-from .base import Backbone, BackboneRegistry
+from .registry import BackboneRegistry
 
 __all__ = [
     'BasicBlock',
@@ -24,7 +23,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-class BasicBlock(layers.CNNBlockBase):
+class BasicBlock(layers.BaseCNNBlock):
     """The basic residual block for ResNet-18 and ResNet-34.
 
     The block has two 3x3 conv layers and a projection shortcut if needed defined in
@@ -102,7 +101,7 @@ class BasicBlock(layers.CNNBlockBase):
         return out
 
 
-class BottleneckBlock(layers.CNNBlockBase):
+class BottleneckBlock(layers.BaseCNNBlock):
     """The standard bottleneck block used by ResNet-50, 101 and 152.
 
     The block has 3 conv layers with kernels 1x1, 3x3, 1x1, and a projection shortcut if needed
@@ -217,7 +216,7 @@ class BottleneckBlock(layers.CNNBlockBase):
         return out
 
 
-class BasicStem(layers.CNNBlockBase):
+class BasicStem(layers.BaseCNNBlock):
     """The standard ResNet stem (layers before the first residual block)."""
 
     def __init__(
@@ -252,7 +251,7 @@ class BasicStem(layers.CNNBlockBase):
         return x
 
 
-class ResNet(Backbone):
+class ResNet(layers.BaseModule):
     """`Deep Residual Learning for Image Recognition`_.
 
     .. _`Deep Residual Learning for Image Recognition`:
@@ -269,7 +268,7 @@ class ResNet(Backbone):
 
     def __init__(
         self,
-        stem: layers.CNNBlockBase,
+        stem: layers.BaseCNNBlock,
         stages: List[nn.Sequential],
         num_classes: Optional[int] = None,
         out_features: Optional[List[str]] = None,
@@ -296,22 +295,26 @@ class ResNet(Backbone):
         self.add_module(name, stem)
         current_channels = self.stem.out_channels
         current_stride = self.stem.stride
-        self._output_shape = {name: ShapeSpec(channels=current_channels, stride=current_stride)}
+        self._output_shape = {
+            name: layers.ShapeSpec(channels=current_channels, stride=current_stride)
+        }
 
-        self._stage_names = []
+        self.names_and_stages = []
         for i, stage in enumerate(stages, start=2):
             if len(stage) == 0:
                 raise ValueError('Stage is empty')
             for block in stage:
-                if not isinstance(block, layers.CNNBlockBase):
+                if not isinstance(block, layers.BaseCNNBlock):
                     raise TypeError('Block should be CNNBlockBase. Got {}'.format(type(block)))
 
             name = 'res{}'.format(i)
             self.add_module(name, stage)
-            self._stage_names.append(name)
+            self.names_and_stages.append((name, stage))
             current_channels = stage[-1].out_channels
             current_stride = current_stride * np.prod([b.stride for b in stage])
-            self._output_shape[name] = ShapeSpec(channels=current_channels, stride=current_stride)
+            self._output_shape[name] = layers.ShapeSpec(
+                channels=current_channels, stride=current_stride
+            )
 
         if num_classes is not None:
             self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
@@ -338,10 +341,10 @@ class ResNet(Backbone):
         if 'stem' in self._out_features:
             outputs['stem'] = x
 
-        for stage_name in self._stage_names:
-            x = getattr(self, stage_name)(x)
-            if stage_name in self._out_features:
-                outputs[stage_name] = x
+        for name, stage in self.names_and_stages:
+            x = stage(x)
+            if name in self._out_features:
+                outputs[name] = x
 
         if self._num_classes is not None:
             x = self.avgpool(x)
@@ -411,14 +414,14 @@ class ResNet(Backbone):
         """
         if freeze_at >= 1:
             self.stem.freeze()
-        for idx, stage_name in enumerate(self._stage_names, start=2):
+        for idx, (_, stage) in enumerate(self.names_and_stages, start=2):
             if freeze_at >= idx:
-                for block in getattr(self, stage_name):
+                for block in stage.children():
                     block.freeze()
         return self
 
     @property
-    def output_shape(self) -> Dict[str, ShapeSpec]:
+    def output_shape(self) -> Dict[str, layers.ShapeSpec]:
         return {name: self._output_shape[name] for name in self._out_features}
 
 
