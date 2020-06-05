@@ -2,7 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 import inspect
 import math
-from typing import Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
 from foundation.nn import weight_init
@@ -189,9 +189,8 @@ NeckRegistry.register_partial('RCNN_FPN_Neck', top_block=LastLevelMaxPool())(FPN
 
 
 @NeckRegistry.register('RetinaNet_FPN_Neck')
-def build_retinanet_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs):
-    """Returns an instance of :class:`FPN` neck with top_block is LastLevelP6P7.
-    """
+def build_retinanet_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs: Any) -> FPN:
+    """Returns an instance of :class:`FPN` neck with top_block is LastLevelP6P7."""
     if 'top_block' in kwargs:
         raise ValueError('top_block will be set to LastLevelP6P7 automatically')
 
@@ -199,4 +198,4 @@ def build_retinanet_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs)
     out_channels = kwargs.get('out_channels', sig.parameters['out_channels'].default)
 
     top_block = LastLevelP6P7(input_shape['res5'].channels, out_channels, 'res5')
-    return FPN(**kwargs, top_block=top_block)
+    return FPN(input_shape, **kwargs, top_block=top_block)
