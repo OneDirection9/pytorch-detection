@@ -189,13 +189,8 @@ NeckRegistry.register_partial('RCNN_FPN_Neck', top_block=LastLevelMaxPool())(FPN
 
 
 @NeckRegistry.register('RetinaNet_FPN_Neck')
-def build_retinanet_fpn_neck(**kwargs):
-    """
-    Args:
-        kwargs: Keyword arguments of constructor of FPN, except top_block.
-
-    Returns:
-        nn.Module: FPN neck with top_block is LastLevelP6P7.
+def build_retinanet_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs):
+    """Returns an instance of :class:`FPN` neck with top_block is LastLevelP6P7.
     """
     if 'top_block' in kwargs:
         raise ValueError('top_block will be set to LastLevelP6P7 automatically')
@@ -203,5 +198,5 @@ def build_retinanet_fpn_neck(**kwargs):
     sig = inspect.signature(FPN.__init__)
     out_channels = kwargs.get('out_channels', sig.parameters['out_channels'].default)
 
-    top_block = LastLevelP6P7(kwargs['input_shape']['res5'].channels, out_channels, 'res5')
+    top_block = LastLevelP6P7(input_shape['res5'].channels, out_channels, 'res5')
     return FPN(**kwargs, top_block=top_block)
