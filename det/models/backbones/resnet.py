@@ -458,7 +458,7 @@ def build_resnet_backbone(
             ResNet. The first is a convolution, and the following stages are each group of residual
             blocks.
         num_classes: See :class:`ResNet`.
-        out_features: See :class:`ResNet.
+        out_features: See :class:`ResNet`.
     """
     if res5_dilation not in (1, 2):
         raise ValueError('res5_dilation can only be 1 or 2. Got {}'.format(res5_dilation))
