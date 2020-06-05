@@ -325,6 +325,7 @@ class ResNet(layers.BaseModule):
             # drawing weights from a zero-mean Gaussian with standard deviation of 0.01."
             nn.init.normal_(self.linear.weight, std=0.01)
             name = 'linear'
+            self._output_shape[name] = layers.ShapeSpec(channels=num_classes)
 
         if out_features is None:
             out_features = [name]
