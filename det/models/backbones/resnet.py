@@ -291,13 +291,13 @@ class ResNet(layers.BaseModule):
 
         self._num_classes = num_classes
 
+        output_shape = {}
+
         name = 'stem'
         self.add_module(name, stem)
-        current_channels = self.stem.out_channels
-        current_stride = self.stem.stride
-        self._output_shape = {
-            name: layers.ShapeSpec(channels=current_channels, stride=current_stride)
-        }
+        current_channels = stem.out_channels
+        current_stride = stem.stride
+        output_shape[name] = layers.ShapeSpec(channels=current_channels, stride=current_stride)
 
         self._stage_names = []
         for i, stage in enumerate(stages, start=2):
@@ -312,9 +312,7 @@ class ResNet(layers.BaseModule):
             self._stage_names.append(name)
             current_channels = stage[-1].out_channels
             current_stride = current_stride * np.prod([b.stride for b in stage])
-            self._output_shape[name] = layers.ShapeSpec(
-                channels=current_channels, stride=current_stride
-            )
+            output_shape[name] = layers.ShapeSpec(channels=current_channels, stride=current_stride)
 
         if num_classes is not None:
             self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
@@ -325,33 +323,33 @@ class ResNet(layers.BaseModule):
             # drawing weights from a zero-mean Gaussian with standard deviation of 0.01."
             nn.init.normal_(self.linear.weight, std=0.01)
             name = 'linear'
-            self._output_shape[name] = layers.ShapeSpec(channels=num_classes)
+            output_shape[name] = layers.ShapeSpec(channels=num_classes)
 
         if out_features is None:
             out_features = [name]
-        self._out_features = out_features
-        assert len(self._out_features) != 0
+        assert len(out_features) != 0
 
         children = [x[0] for x in self.named_children()]
-        for out_feature in self._out_features:
+        for out_feature in out_features:
             assert out_feature in children, 'Available children: {}'.format(', '.format(children))
+        self._output_shape = {k: v for k, v in output_shape.items() if k in out_features}
 
     def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
         outputs = {}
         x = self.stem(x)
-        if 'stem' in self._out_features:
+        if 'stem' in self._output_shape:
             outputs['stem'] = x
 
         for name in self._stage_names:
             x = getattr(self, name)(x)
-            if name in self._out_features:
+            if name in self._output_shape:
                 outputs[name] = x
 
         if self._num_classes is not None:
             x = self.avgpool(x)
             x = torch.flatten(x, 1)
             x = self.linear(x)
-            if 'linear' in self._out_features:
+            if 'linear' in self._output_shape:
                 outputs['linear'] = x
 
         return outputs
@@ -424,7 +422,7 @@ class ResNet(layers.BaseModule):
 
     @property
     def output_shape(self) -> Dict[str, layers.ShapeSpec]:
-        return {name: self._output_shape[name] for name in self._out_features}
+        return self._output_shape
 
 
 @BackboneRegistry.register('ResNet_Backbone')
