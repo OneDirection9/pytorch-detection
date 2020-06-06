@@ -299,7 +299,7 @@ class ResNet(layers.BaseModule):
             name: layers.ShapeSpec(channels=current_channels, stride=current_stride)
         }
 
-        self.names_and_stages = []
+        self._stage_names = []
         for i, stage in enumerate(stages, start=2):
             if len(stage) == 0:
                 raise ValueError('Stage is empty')
@@ -309,7 +309,7 @@ class ResNet(layers.BaseModule):
 
             name = 'res{}'.format(i)
             self.add_module(name, stage)
-            self.names_and_stages.append((name, stage))
+            self._stage_names.append(name)
             current_channels = stage[-1].out_channels
             current_stride = current_stride * np.prod([b.stride for b in stage])
             self._output_shape[name] = layers.ShapeSpec(
@@ -342,8 +342,8 @@ class ResNet(layers.BaseModule):
         if 'stem' in self._out_features:
             outputs['stem'] = x
 
-        for name, stage in self.names_and_stages:
-            x = stage(x)
+        for name in self._stage_names:
+            x = getattr(self, name)(x)
             if name in self._out_features:
                 outputs[name] = x
 
@@ -415,8 +415,9 @@ class ResNet(layers.BaseModule):
         """
         if freeze_at >= 1:
             self.stem.freeze()
-        for idx, (_, stage) in enumerate(self.names_and_stages, start=2):
+        for idx, name in enumerate(self._stage_names, start=2):
             if freeze_at >= idx:
+                stage = getattr(self, name)
                 for block in stage.children():
                     block.freeze()
         return self
