@@ -329,10 +329,12 @@ class ResNet(layers.BaseModule):
             out_features = [name]
         assert len(out_features) != 0
 
-        children = [x[0] for x in self.named_children()]
         for out_feature in out_features:
-            assert out_feature in children, 'Available children: {}'.format(', '.format(children))
-        self._output_shape = {k: v for k, v in output_shape.items() if k in out_features}
+            #  Adding name to output_shape and module simultaneously
+            assert out_feature in output_shape, 'Available children: {}'.format(
+                ', '.join(output_shape.keys())
+            )
+        self._output_shape = {f: output_shape[f] for f in out_features}
 
     def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
         outputs = {}
