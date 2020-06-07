@@ -2,6 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 import inspect
 import math
+from abc import ABCMeta
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
@@ -96,6 +97,7 @@ class FPN(layers.BaseModule):
 
         in_channels = [input_shape[f].channels for f in in_features]
         in_strides = [input_shape[f].stride for f in in_features]
+        _assert_strides_are_log2_contiguous(in_strides)
 
         self._size_divisibility = in_strides[-1]
         self._in_features = in_features
@@ -106,6 +108,8 @@ class FPN(layers.BaseModule):
         self.top_block = top_block
         self._out_features = []
         self._output_shape = {}
+        self._lateral_names = []
+        self._output_names = []
 
         use_bias = norm == ''
         for stride, channels in zip(in_strides, in_channels):
@@ -126,12 +130,17 @@ class FPN(layers.BaseModule):
             )
             weight_init.caffe2_xavier_init(lateral_conv)
             weight_init.caffe2_xavier_init(output_conv)
-            self.lateral_convs.append(lateral_conv)
-            self.output_convs.append(output_conv)
 
-            name = 'p{}'.format(int(math.log2(stride)))
-            self._out_features.append(name)
-            self._output_shape[name] = layers.ShapeSpec(channels=out_channels, stride=stride)
+            stage = int(math.log2(stride))
+
+            lateral_name = 'lateral{}'.format(stage)
+            self.add_module(lateral_name, lateral_conv)
+            self._lateral_names.append(lateral_name)
+
+            output_name = 'p{}'.format(stage)
+            self.add_module(output_name, output_conv)
+            self._output_names.append(output_name)
+            self._output_shape[output_name] = layers.ShapeSpec(channels=out_channels, stride=stride)
 
         if self.top_block is not None:
             stage = int(math.log2(in_strides[-1])) + 1
@@ -141,6 +150,10 @@ class FPN(layers.BaseModule):
                 self._output_shape[name] = layers.ShapeSpec(channels=out_channels, stride=2 ** s)
 
     def forward(self, bottom_up_features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        x = [bottom_up_features[f] for f in self._in_features]
+
+        laterals = [lateral_conv(x_i) for x_i, lateral_conv in zip(x, self.lateral_convs)]
+
         # Build laterals
         laterals = [
             lateral_conv(bottom_up_features[feature])
@@ -182,6 +195,25 @@ def _assert_strides_are_log2_contiguous(strides: List[int]) -> None:
     for i, stride in enumerate(strides[1:], 1):
         if stride != 2 * strides[i - 1]:
             raise ValueError('Strides {} {} are not log2 contiguous'.format(stride, strides[i - 1]))
+
+
+class TopBlock(layers.BaseModule, metaclass=ABCMeta):
+    """Base class for the extra block in the FPN."""
+
+    def __init__(
+        self,
+        in_stride: int,
+        in_feature: str,
+    ) -> None:
+        """
+        Args:
+            in_stride: The stride of last level of FPN stem layer.
+            in_feature: The feature name for input feature maps.
+        """
+        super(TopBlock, self).__init__()
+
+        self._stage = int(math.log2(in_stride)) + 1
+        self._in_feature = in_feature
 
 
 # Presetting top_block
