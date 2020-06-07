@@ -330,7 +330,8 @@ class ResNet(layers.BaseModule):
         assert len(out_features) != 0
 
         for out_feature in out_features:
-            #  Adding name to output_shape and module simultaneously
+            # In previous code snippet, I add name to output_shape and module simultaneously.
+            # So I only need to check the output_shape
             assert out_feature in output_shape, 'Available children: {}'.format(
                 ', '.join(output_shape.keys())
             )
