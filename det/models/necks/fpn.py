@@ -55,7 +55,8 @@ class FPN(layers.BaseModule):
                 bottom-up features or FPN output (smallest resolution), and the result will extend
                 the result list. The top_block further downsamples the feature map. It is expected
                 to take the bottom_up_features and fpn_body_features as input, and returns new
-                feature maps. See :class:`TopBlock`.
+                feature maps. See :class:`TopBlock`. Usually use a wrapper to create top_block and
+                pass it to FPN constructor.
         """
         super(FPN, self).__init__()
 
