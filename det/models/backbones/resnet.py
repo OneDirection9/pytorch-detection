@@ -329,9 +329,7 @@ class ResNet(layers.BaseModule):
             out_features = [name]
         assert len(out_features) != 0
 
-        assert set(output_shape.keys()).issubset(
-            [name for name, _ in self.named_children()]
-        ), 'output name(s) are not present in model'
+        assert set(output_shape.keys()).issubset([name for name, _ in self.named_children()])
 
         if not all([out_feature in output_shape for out_feature in out_features]):
             raise ValueError('Available out features: {}'.format(', '.join(output_shape.keys())))
