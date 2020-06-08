@@ -55,7 +55,7 @@ class LastLevelMaxPool(TopBlock):
 
         self._in_feature = 'p5'
 
-        self.p6 = nn.MaxPool2d(kernel_size=3, stride=2, padding=0)
+        self.p6 = nn.MaxPool2d(kernel_size=1, stride=2, padding=0)
         self._output_shape = {'p6': layers.ShapeSpec(channels=in_channels, stride=2)}
         assert set(self._output_shape.keys()).issubset([name for name, _ in self.named_children()])
 
