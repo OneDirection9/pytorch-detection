@@ -176,6 +176,8 @@ class TopBlock(layers.BaseModule, metaclass=ABCMeta):
         pass
 
 
+# TODO: Consider take in_stride as argument of constructor, that can infer the stage from it.
+#     So that can apply the TopBlock to FPN on the fly, don't need to fix the feature names.
 class LastLevelMaxPool(TopBlock):
     """This module is used in the original FPN to generate a downsampled P6 from P5."""
 
