@@ -329,12 +329,13 @@ class ResNet(layers.BaseModule):
             out_features = [name]
         assert len(out_features) != 0
 
-        for out_feature in out_features:
-            # In previous code snippet, I add name to output_shape and module simultaneously.
-            # So I only need to check the output_shape
-            assert out_feature in output_shape, 'Available children: {}'.format(
-                ', '.join(output_shape.keys())
-            )
+        assert set(output_shape.keys()).issubset(
+            [name for name, _ in self.named_children()]
+        ), 'output name(s) are not present in model'
+
+        if not all([out_feature in output_shape for out_feature in out_features]):
+            raise ValueError('Available out features: {}'.format(', '.join(output_shape.keys())))
+        # Only keep the specific output shape
         self._output_shape = {f: output_shape[f] for f in out_features}
 
     def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
