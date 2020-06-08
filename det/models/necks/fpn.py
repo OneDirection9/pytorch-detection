@@ -14,11 +14,102 @@ from det import layers
 from .registry import NeckRegistry
 
 __all__ = [
-    'FPN',
     'TopBlock',
     'LastLevelMaxPool',
     'LastLevelP6P7',
+    'FPN',
 ]
+
+
+class TopBlock(layers.BaseModule, metaclass=ABCMeta):
+    """Base class for the extra block in the FPN."""
+
+    @abstractmethod
+    def forward(
+        self,
+        bottom_up_features: Dict[str, torch.Tensor],
+        fpn_body_features: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Args:
+            bottom_up_features: The original bottom up feature maps.
+            fpn_body_features: The FPN feature maps.
+
+        Returns:
+            Extra new feature maps.
+        """
+        pass
+
+
+# TODO: Consider using in_stride as argument of constructor, so that can infer in_feature, and can
+#  apply the TopBlock to FPN on the fly, don't need to fix the feature names.
+class LastLevelMaxPool(TopBlock):
+    """This module is used in the original FPN to generate a downsampled P6 from P5."""
+
+    def __init__(self, in_channels: int) -> None:
+        """
+        Args:
+            in_channels: Output channels of P5.
+        """
+        super(LastLevelMaxPool, self).__init__()
+
+        self._in_feature = 'p5'
+
+        self.p6 = nn.MaxPool2d(kernel_size=3, stride=2, padding=0)
+        self._output_shape = {'p6': layers.ShapeSpec(channels=in_channels, stride=2)}
+        assert set(self._output_shape.keys()).issubset([name for name, _ in self.named_children()])
+
+    def forward(
+        self,
+        bottom_up_features: Dict[str, torch.Tensor],
+        fpn_body_features: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+        return {'p6': self.p6(fpn_body_features[self._in_feature])}
+
+    @property
+    def output_shape(self) -> Dict[str, layers.ShapeSpec]:
+        return self._output_shape
+
+
+class LastLevelP6P7(TopBlock):
+    """This module is used in RetinaNet to generate extra layers, P6 and P7 from C5 features."""
+
+    def __init__(self, in_channels: int, out_channels: int) -> None:
+        """
+        Args:
+            in_channels: Output channels of C5 features.
+            out_channels: Output channels of P6 and P7 features.
+        """
+        super(LastLevelP6P7, self).__init__()
+
+        self._in_feature = 'res5'
+
+        self.p6 = nn.Conv2d(in_channels, out_channels, 3, 2, 1)
+        self.p7 = nn.Conv2d(out_channels, out_channels, 3, 2, 1)
+        self._output_shape = {
+            'p6': layers.ShapeSpec(channels=out_channels, stride=2),
+            'p7': layers.ShapeSpec(channels=out_channels, stride=4),
+        }
+        assert set(self._output_shape.keys()).issubset([name for name, _ in self.named_children()])
+
+    def forward(
+        self,
+        bottom_up_features: Dict[str, torch.Tensor],
+        fpn_body_features: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+        outputs = {}
+
+        x = self.p6(bottom_up_features[self._in_feature])
+        outputs['p6'] = x
+
+        x = self.p7(x)
+        outputs['p7'] = x
+
+        return outputs
+
+    @property
+    def output_shape(self) -> Dict[str, layers.ShapeSpec]:
+        return self._output_shape
 
 
 @NeckRegistry.register('FPN')
@@ -32,11 +123,12 @@ class FPN(layers.BaseModule):
     def __init__(
         self,
         input_shape: Dict[str, layers.ShapeSpec],
+        *,
         in_features: List[str] = ('res2', 'res3', 'res4', 'res5'),
         out_channels: int = 256,
         norm: Union[str, Callable] = '',
         fuse_type: str = 'sum',
-        top_block: Optional[nn.Module] = None,
+        top_block: Optional[TopBlock] = None,
     ) -> None:
         """
         Args:
@@ -137,7 +229,9 @@ class FPN(layers.BaseModule):
         }
         # part2: from top_block
         if self.top_block is not None:
-            outputs.update(self.top_block(bottom_up_features, outputs))
+            top_block_outputs = self.top_block(bottom_up_features, outputs)
+            assert set(outputs.keys()).isdisjoint(set(top_block_outputs.keys()))
+            outputs.update(top_block_outputs)
 
         return outputs
 
@@ -155,97 +249,6 @@ def _assert_strides_are_log2_contiguous(strides: List[int]) -> None:
     for i, stride in enumerate(strides[1:], 1):
         if stride != 2 * strides[i - 1]:
             raise ValueError('Strides {} {} are not log2 contiguous'.format(stride, strides[i - 1]))
-
-
-class TopBlock(layers.BaseModule, metaclass=ABCMeta):
-    """Base class for the extra block in the FPN."""
-
-    @abstractmethod
-    def forward(
-        self,
-        bottom_up_features: Dict[str, torch.Tensor],
-        fpn_body_features: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-        """
-        Args:
-            bottom_up_features: The original bottom up feature maps.
-            fpn_body_features: The FPN feature maps.
-
-        Returns:
-            Extra new feature maps.
-        """
-        pass
-
-
-# TODO: Consider take in_stride as argument of constructor, that can infer the stage from it.
-#     So that can apply the TopBlock to FPN on the fly, don't need to fix the feature names.
-class LastLevelMaxPool(TopBlock):
-    """This module is used in the original FPN to generate a downsampled P6 from P5."""
-
-    def __init__(self, in_channels: int) -> None:
-        """
-        Args:
-            in_channels: Output channels of P5.
-        """
-        super(LastLevelMaxPool, self).__init__()
-
-        self._in_feature = 'p5'
-
-        self.p6 = nn.MaxPool2d(kernel_size=3, stride=2, padding=0)
-        self._output_shape = {'p6': layers.ShapeSpec(channels=in_channels, stride=2)}
-        assert set(self._output_shape.keys()).issubset([name for name, _ in self.named_children()])
-
-    def forward(
-        self,
-        bottom_up_features: Dict[str, torch.Tensor],
-        fpn_body_features: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-        return {'p6': self.p6(fpn_body_features[self._in_feature])}
-
-    @property
-    def output_shape(self) -> Dict[str, layers.ShapeSpec]:
-        return self._output_shape
-
-
-class LastLevelP6P7(TopBlock):
-    """This module is used in RetinaNet to generate extra layers, P6 and P7 from C5 features."""
-
-    def __init__(self, in_channels: int, out_channels: int) -> None:
-        """
-        Args:
-            in_channels: Output channels of C5 features.
-            out_channels: Output channels of P6 and P7 features.
-        """
-        super(LastLevelP6P7, self).__init__()
-
-        self._in_feature = 'res5'
-
-        self.p6 = nn.Conv2d(in_channels, out_channels, 3, 2, 1)
-        self.p7 = nn.Conv2d(out_channels, out_channels, 3, 2, 1)
-        self._output_shape = {
-            'p6': layers.ShapeSpec(channels=out_channels, stride=2),
-            'p7': layers.ShapeSpec(channels=out_channels, stride=4),
-        }
-        assert set(self._output_shape.keys()).issubset([name for name, _ in self.named_children()])
-
-    def forward(
-        self,
-        bottom_up_features: Dict[str, torch.Tensor],
-        fpn_body_features: Dict[str, torch.Tensor],
-    ) -> Dict[str, torch.Tensor]:
-        outputs = {}
-
-        x = self.p6(bottom_up_features[self._in_feature])
-        outputs['p6'] = x
-
-        x = self.p7(x)
-        outputs['p7'] = x
-
-        return outputs
-
-    @property
-    def output_shape(self) -> Dict[str, layers.ShapeSpec]:
-        return self._output_shape
 
 
 @NeckRegistry.register('RCNN_FPN_Neck')
