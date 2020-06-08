@@ -86,6 +86,8 @@ class LastLevelP6P7(TopBlock):
 
         self.p6 = nn.Conv2d(in_channels, out_channels, 3, 2, 1)
         self.p7 = nn.Conv2d(out_channels, out_channels, 3, 2, 1)
+        for module in [self.p6, self.p7]:
+            weight_init.caffe2_xavier_init(module)
         self._output_shape = {
             'p6': layers.ShapeSpec(channels=out_channels, stride=2),
             'p7': layers.ShapeSpec(channels=out_channels, stride=4),
