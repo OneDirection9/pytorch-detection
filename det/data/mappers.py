@@ -1,3 +1,6 @@
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+#
+# Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
@@ -391,7 +394,15 @@ class TransformApply(object):
         if 'keypoints' in annotation:
             # (Nx3,) -> (N, 3)
             keypoints = np.asarray(annotation['keypoints'], dtype='float64').reshape(-1, 3)
-            keypoints[:, :2] = transforms.apply_coords(keypoints[:, :2])
+            keypoints_xy = transforms.apply_coords(keypoints[:, :2])
+
+            # Set all out-of-boundary points to "unlabeled"
+            inside = (keypoints_xy >= np.array([0, 0])) & (
+                keypoints_xy <= np.array(image_size[::-1])
+            )
+            inside = inside.all(axis=1)
+            keypoints[:, :2] = keypoints_xy
+            keypoints[:, 2][~inside] = 0
 
             # This assumes that HFlipTransform is the only one that does flip
             if isinstance(transforms, T.TransformList):
@@ -401,13 +412,12 @@ class TransformApply(object):
             else:
                 do_hflip = isinstance(transforms, T.HFlipTransform)
 
+            # If flipped, swap each keypoint with its opposite-handed equivalent
             if do_hflip:
                 assert keypoint_hflip_indices is not None
                 keypoints = keypoints[keypoint_hflip_indices, :]
 
             # Maintain COCO convention that if visibility == 0, then x, y = 0
-            # TODO: may need to reset visibility for cropped keypoints, but it does not matter for
-            #   our existing algorithms
             keypoints[keypoints[:, 2] == 0] = 0
             annotation['keypoints'] = keypoints
 
@@ -426,19 +436,19 @@ class TransformApply(object):
             annotations: Annotations in the format of a list of dictionaries.
         """
         image_size = image.shape[:2]
+
         crop_size = random_crop.get_crop_size(image_size)
         crop_size = np.asarray(crop_size, dtype=np.int32)
+        assert (
+            image_size[0] >= crop_size[0] and image_size[1] >= crop_size[1]
+        ), 'Crop size is larger than image size!'
 
         ann = np.random.choice(annotations)
-        crop_size = np.asarray(crop_size, dtype=np.int32)
         bbox = BoxMode.convert(ann['bbox'], ann['bbox_mode'], BoxMode.XYXY_ABS)
         center_yx = (bbox[1] + bbox[3]) * 0.5, (bbox[0] + bbox[2]) * 0.5
         assert (
             image_size[0] >= center_yx[0] and image_size[1] >= center_yx[1]
         ), 'The annotation bounding box is outside of the image!'
-        assert (
-            image_size[0] >= crop_size[0] and image_size[1] >= crop_size[1]
-        ), 'Crop size is larger than image size!'
 
         min_yx = np.maximum(np.floor(center_yx).astype(np.int32) - crop_size, 0)
         max_yx = np.maximum(np.asarray(image_size, dtype=np.int32) - crop_size, 0)
