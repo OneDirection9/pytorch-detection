@@ -1,3 +1,6 @@
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+#
+# Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
 import inspect
@@ -18,6 +21,8 @@ __all__ = [
     'LastLevelMaxPool',
     'LastLevelP6P7',
     'FPN',
+    'build_rcnn_fpn_neck',
+    'build_retinanet_fpn_neck',
 ]
 
 
