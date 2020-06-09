@@ -472,7 +472,7 @@ class TransformApply(object):
             transform = self.transform
 
         example['image'] = transform.apply_image(example['image'])
-        image_shape = example['image'].shape
+        image_shape = example['image'].shape[:2]  # H, W
 
         if 'annotations' in example:
             example['annotations'] = [
