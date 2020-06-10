@@ -23,6 +23,13 @@ data:
       - name: RandomHFlip
         prob: 0.5
       - name: ToInstances
+    dataloader:
+      sampler:
+        name: TrainingSampler
+      aspect_ratio_grouping: True
+      images_per_batch: 2
+      num_workers: 0
+
   test:
     datasets:
       - name: COCOInstance
@@ -37,32 +44,25 @@ data:
         max_size: 1333
         sample_style: choice
       - name: ToInstances
-
-dataloader:
-  train:
-    sampler:
-      name: TrainingSampler
-    aspect_ratio_grouping: True
-    images_per_batch: 2
-    num_workers: 0
-  test:
-    num_workers: 0
-
+    dataloader:
+      num_workers: 0
 
 model:
   name: FasterRCNN
   backbone:
-    name: ResNet
+    name: ResNet_Backbone
     depth: 50
+    norm: BN
+    out_features: ['res2', 'res3', 'res4', 'res5']
   neck:
-    name: FPN
+    name: RCNN_FPN_Neck
   proposal_head:
     name: RPN
     anchor_generator:
       name: StandardAnchorGenerator
   roi_head:
     name: ROIHead
-  device: cuda
+  device: cpu
 
 cudnn_benchmark: False
 output_dir: ./experiments/demo

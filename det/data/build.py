@@ -2,11 +2,11 @@
 The workflow of data is:
 
 1. Build raw dataset:
-    1.1. Get examples from one or more :class:`VisionDataset`. Build :class:`Metadata` if needed.
+    1.1. Get examples from one or more :class:`VisionDataset`.
     1.2. Pass each example through zero or more :class:`Pipeline` to get a new list of examples.
     1.3. Pass new examples to :class:`DatasetFromList` to get a dataset.
 2. Build final dataset:
-    2.1. Build :class:`BaseMapper` and build :class:`Transform` or :class:`TransformGen` if needed.
+    2.1. Build :class:`Mapper` if needed.
     2.2. Pass mapper to :class:`MapDataset` to get final dataset.
 3. Build dataloader
 """
@@ -215,15 +215,19 @@ def build_pytorch_dataset(data_cfg: _SingleCfg) -> Dataset:
     return dataset
 
 
-def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
-    """Builds training dataloader from all config.
+def build_train_dataloader(data_cfg: _SingleCfg) -> DataLoader:
+    """Builds training dataloader from data train config.
 
     Args:
-        cfg: Config which loads from a .yaml file.
+        data_cfg: Data config that should be a dictionary, looks something like:
+            {'datasets': ...
+             'pipelines': ...
+             'mappers': ...
+             'dataloader': ...}
     """
-    dataset = build_pytorch_dataset(cfg['data']['train'])
+    dataset = build_pytorch_dataset(data_cfg)
 
-    dl_cfg = cfg['dataloader']['train']
+    dl_cfg = data_cfg['dataloader']
 
     # Build sampler
     sampler_cfg = dl_cfg['sampler']
@@ -260,15 +264,19 @@ def build_train_dataloader(cfg: _SingleCfg) -> DataLoader:
     return data_loader
 
 
-def build_test_dataloader(cfg: _SingleCfg) -> DataLoader:
-    """Builds test dataloader from all config.
+def build_test_dataloader(data_cfg: _SingleCfg) -> DataLoader:
+    """Builds test dataloader from data test config.
 
     Args:
-        cfg: Config which loads from a .yaml file.
+        data_cfg: Data config that should be a dictionary, looks something like:
+            {'datasets': ...
+             'pipelines': ...
+             'mappers': ...
+             'dataloader': ...}
     """
-    dataset = build_pytorch_dataset(cfg['data']['test'])
+    dataset = build_pytorch_dataset(data_cfg)
 
-    dl_cfg = cfg['dataloader']['test']
+    dl_cfg = data_cfg['dataloader']
 
     sampler = InferenceSampler(dataset)
     # Always use 1 image per worker during inference since this is the
