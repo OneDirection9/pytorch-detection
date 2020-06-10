@@ -20,7 +20,7 @@ __all__ = [
     'BottleneckBlock',
     'BasicStem',
     'ResNet',
-    'build_resnet_backbone',
+    'resnet_backbone',
 ]
 
 logger = logging.getLogger(__name__)
@@ -431,7 +431,7 @@ class ResNet(layers.BaseModule):
 
 
 @BackboneRegistry.register('ResNet_Backbone')
-def build_resnet_backbone(
+def resnet_backbone(
     depth: int = 50,
     in_channels: int = 3,
     stem_out_channels: int = 64,

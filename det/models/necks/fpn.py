@@ -21,8 +21,8 @@ __all__ = [
     'LastLevelMaxPool',
     'LastLevelP6P7',
     'FPN',
-    'build_rcnn_fpn_neck',
-    'build_retinanet_fpn_neck',
+    'rcnn_fpn_neck',
+    'retinanet_fpn_neck',
 ]
 
 
@@ -258,8 +258,13 @@ def _assert_strides_are_log2_contiguous(strides: List[int]) -> None:
             raise ValueError('Strides {} {} are not log2 contiguous'.format(stride, strides[i - 1]))
 
 
+"""
+Wrappers of FPN presetting top_block
+"""
+
+
 @NeckRegistry.register('RCNN_FPN_Neck')
-def build_rcnn_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs: Any) -> FPN:
+def rcnn_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs: Any) -> FPN:
     """Returns an instance of :class:`FPN` neck with top_block is LastLevelMaxPool."""
     if 'top_block' in kwargs:
         raise ValueError('top_block will be set to LastLevelMaxPool automatically')
@@ -272,7 +277,7 @@ def build_rcnn_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs: Any)
 
 
 @NeckRegistry.register('RetinaNet_FPN_Neck')
-def build_retinanet_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs: Any) -> FPN:
+def retinanet_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs: Any) -> FPN:
     """Returns an instance of :class:`FPN` neck with top_block is LastLevelP6P7."""
     if 'top_block' in kwargs:
         raise ValueError('top_block will be set to LastLevelP6P7 automatically')
