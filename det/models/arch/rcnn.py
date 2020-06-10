@@ -3,68 +3,93 @@
 # Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
+from typing import List, Optional
+
 import torch
-from foundation.backends.torch.utils import batch_tensors
+from foundation.registry import build
 from torch import nn
 
-from ..registry import ArchStash
+from det import layers
+from det.structures import ImageList
+from ..backbones import BackboneRegistry
+from ..necks import NeckRegistry
+from .registry import ArchRegistry
 
-__all__ = ['FasterRCNN']
+__all__ = ['GeneralizedRCNN']
 
 
-@ArchStash.register('FasterRCNN')
-class FasterRCNN(nn.Module):
+class GeneralizedRCNN(nn.Module):
     """`Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks`_.
-
-    Args:
-        backbone (Module): Convolution neural network used to extra image features.
 
     .. _`Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks`:
         https://arxiv.org/abs/1506.01497
     """
 
-    def __init__(self, backbone, neck=None, proposal_head=None, roi_head=None, device='cuda'):
-        super(FasterRCNN, self).__init__()
+    def __init__(
+        self,
+        backbone: layers.BaseModule,
+        neck: Optional[layers.BaseModule] = None,
+        proposal_generator=None,
+        roi_head=None,
+        pixel_mean: List[float] = (103.530, 116.280, 123.675),
+        pixel_std: List[float] = (57.375, 57.120, 58.395),
+    ) -> None:
+        """
+        Args:
+            backbone (Module): Convolution neural network used to extra image features.
+            neck:
+            proposal_generator:
+            roi_head:
+        """
+        super(GeneralizedRCNN, self).__init__()
+
+        if len(pixel_mean) != len(pixel_std):
+            raise ValueError('Length of pixel_mean and pixel_std should be the same')
 
         self.backbone = backbone
         self.neck = neck
-        self.proposal_head = proposal_head
+        self.proposal_generator = proposal_generator
         self.roi_head = roi_head
 
-        self._device = torch.device(device)
+        if self.neck is not None:
+            self._size_divisibility = self.neck.size_divisibility
+        else:
+            self._size_divisibility = self.backbone.size_divisibility
 
-        self.to(device)
+        self.register_buffer('pixel_mean', torch.Tensor(pixel_mean).view(-1, 1, 1))
+        self.register_buffer('pixel_std', torch.Tensor(pixel_std).view(-1, 1, 1))
+
+    @property
+    def device(self):
+        return self.pixel_mean.device
+
+    def extract_features(self, x):
+        x = self.backbone(x)
+        if self.neck is not None:
+            x = self.neck(x)
+        return x
 
     def forward(self, items):
-        images = self.preprocess_image(items)
-        if 'bboxes' in items[0]:
-            gt_bboxes = [item['bboxes'].to(self._device) for item in items]
-        else:
-            gt_bboxes = None
-
-        # Extract image features
-        features = self.backbone(images)
-        if self.neck is not None:
-            features = self.neck(features)
-
-        # Generate proposals
-        if self.proposal_head is not None:
-            image_sizes = [item['ori_shape'].to(self._device) for item in items]
-            proposals, proposal_losses = self.proposal_head(image_sizes, features, gt_bboxes)
-        else:
-            assert 'proposals' in items[0]
-            proposals = [item['proposals'].to(self._device) for item in items]
-            proposal_losses = {}
-
-        image_ids = [item['id'] for item in items]
-        gt_labels = [item['labels'].to(self._device) for item in items]
-        _, detector_losses = self.roi_head(images, features, proposals, gt_bboxes, gt_labels)
-        print(image_ids)
-        print(proposal_losses)
+        images = [item['image'].to(self.device) for item in items]
+        images = [(x - self.pixel_mean) / self.pixel_std for x in images]
+        images = ImageList.from_tensors(images, self._size_divisibility)
+        features = self.extract_features(images.tensor)
 
         return features
 
-    def preprocess_image(self, items):
-        images = [item['image'].to(self._device) for item in items]
-        images = batch_tensors(images)
-        return images
+
+@ArchRegistry.register('FasterRCNN')
+def build_faster_rcnn(**kwargs):
+    backbone = build(BackboneRegistry, kwargs.pop('backbone'))
+
+    neck = kwargs.pop('neck', None)
+    if neck is not None:
+        neck['input_shape'] = backbone.output_shape
+        neck = build(NeckRegistry, neck)
+
+    proposal_generator = None
+    # proposal_generator = kwargs.pop('proposal_generator', None)
+    # if proposal_generator is not None:
+    #     proposal_generator = build(ProposalGeneratorRegistry, proposal_generator)
+
+    return GeneralizedRCNN(backbone, neck, proposal_generator, **kwargs)

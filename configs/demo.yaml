@@ -16,6 +16,7 @@ data:
         keypoint_on: True
     mappers:
       - name: ImageLoader
+        image_format: BGR
       - name: ResizeShortestEdge
         short: 800
         max_size: 1333
@@ -56,13 +57,12 @@ model:
     out_features: ['res2', 'res3', 'res4', 'res5']
   neck:
     name: RCNN_FPN_Neck
-  proposal_head:
+  proposal_generator:
     name: RPN
     anchor_generator:
       name: StandardAnchorGenerator
   roi_head:
     name: ROIHead
-  device: cpu
 
 cudnn_benchmark: False
 output_dir: ./experiments/demo
