@@ -104,7 +104,7 @@ def get_dataset_examples(
     Returns:
          List of examples.
     """
-    examples = [ds.get_examples() for ds in datasets]
+    examples = [ds.get_items() for ds in datasets]
     for examples_per_ds, ds in zip(examples, datasets):
         if len(examples_per_ds) == 0:
             raise ValueError('{} is empty:\n{}'.format(type(ds).__name__, ds))

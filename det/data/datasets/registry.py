@@ -1,19 +1,23 @@
 from __future__ import absolute_import, division, print_function
 
 from abc import ABCMeta, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from foundation.registry import Registry
+from foundation.registry import Registry, build
 
 from .metadata import Metadata
 
-__all__ = ['VisionDatasetRegistry', 'VisionDataset']
+__all__ = [
+    'VisionDatasetRegistry',
+    'VisionDataset',
+    'build_vision_datasets',
+]
 
 
 class VisionDatasetRegistry(Registry):
     """Registry of vision datasets.
 
-    A vision dataset should have get_examples method returning list of examples in dictionary, and
+    A vision dataset should have get_items method returning list of samples in dictionary, and
     metadata attribute. See :class:`VisionDataset`.
     """
     pass
@@ -23,17 +27,17 @@ class VisionDataset(object, metaclass=ABCMeta):
     """Base vision dataset class.
 
     This is not a typical PyTorch format dataset class. It is intended for storing metadata and
-    producing a list of examples for future usage, e.g. filtering examples without valid
-    annotations, calculating image aspect ratio for grouping, and so on. Then we can use
-    :class:`DatasetFromList` to build a PyTorch format dataset class.
+    producing a list of samples for future usage, e.g. filtering samples without valid annotations,
+    calculating image aspect ratio for grouping, and so on. Then we can use :class:`DatasetFromList`
+    to build a PyTorch format dataset class.
 
     Examples:
 
     .. code-block:: python
 
-        examples = vision_dataset_instance.get_examples()
-        # some operations
-        dataset = DatasetFromList(examples)
+        items = vision_dataset_instance.get_items()
+        items = processing_fn(items)
+        dataset = DatasetFromList(items)
     """
 
     def __init__(self, metadata: Optional[Metadata] = None) -> None:
@@ -45,7 +49,7 @@ class VisionDataset(object, metaclass=ABCMeta):
         return self._metadata
 
     @abstractmethod
-    def get_examples(self) -> List[Dict[str, Any]]:
+    def get_items(self) -> List[Dict[str, Any]]:
         """Returns a list of dictionaries with paths and annotations."""
         pass
 
@@ -53,3 +57,26 @@ class VisionDataset(object, metaclass=ABCMeta):
         return '{}(metadata={})'.format(self.__class__.__name__, self.metadata)
 
     __str__ = __repr__
+
+
+def build_vision_datasets(cfg: Union[Dict[str, Any], List[Dict[str, Any]]]) -> List[VisionDataset]:
+    """Builds vision datasets from config.
+
+    Args:
+        cfg: Dataset config that should be a dictionary or a list of dictionaries, each looks
+            something like:
+            {'name': 'COCOInstance',
+             'json_file': './data/MSCOCO/annotations/instances_train2014.json',
+             'image_root': './data/MSCOCO/train2014/'}
+
+    Returns:
+        List of vision datasets.
+    """
+    if isinstance(cfg, dict):
+        cfg = [cfg]
+
+    if len(cfg) == 0:
+        raise ValueError('None vision dataset is available')
+
+    vision_datasets = [build(VisionDatasetRegistry, c) for c in cfg]
+    return vision_datasets

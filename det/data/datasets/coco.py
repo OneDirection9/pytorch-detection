@@ -65,7 +65,7 @@ class COCODataset(VisionDataset):
             json_file=json_file,
         ))
 
-    def get_examples(self) -> List[Dict[str, Any]]:
+    def get_items(self) -> List[Dict[str, Any]]:
         timer = Timer()
         with contextlib.redirect_stdout(io.StringIO()):  # omit messages printed by COCO
             coco_api = COCO(self.json_file)
