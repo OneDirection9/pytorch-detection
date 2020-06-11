@@ -16,8 +16,10 @@ logger = logging.getLogger(__name__)
 class Processing(object):
     """Filtering out images with only crowd annotations and too few number of keypoints."""
 
-    def __init__(self, filter_empty: bool = True, min_keypoints: int = 0) -> None:
+    def __init__(self, filter_empty: bool = False, min_keypoints: int = 0) -> None:
         """
+        The processing will do nothing by default value (i.e. filter_empty=False, min_keypoints=0).
+
         Args:
             filter_empty: Whether to filter out images without instance annotations.
             min_keypoints: Filter out images with few keypoints than `min_keypoints`. Set to 0 to do
@@ -27,7 +29,7 @@ class Processing(object):
         self.min_keypoints = min_keypoints
 
     @staticmethod
-    def filter_images_with_only_crow_annotations(
+    def filter_images_with_only_crowd_annotations(
         dataset_dicts: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """Filters out images with none annotations or only crowd annotations.
@@ -93,12 +95,17 @@ class Processing(object):
         has_instances = 'annotations' in dataset_dicts[0]
 
         if self.filter_empty and has_instances and 'sem_seg_file_name' not in dataset_dicts:
-            dataset_dicts = self.filter_images_with_only_crow_annotations(dataset_dicts)
+            dataset_dicts = self.filter_images_with_only_crowd_annotations(dataset_dicts)
 
         if self.min_keypoints > 0 and has_instances:
             dataset_dicts = self.filter_images_with_few_keypoints(dataset_dicts, self.min_keypoints)
 
         return dataset_dicts
+
+    def __repr__(self) -> str:
+        return self.__class__.__name__ + '(filter_empty={0}, min_keypoints={1}'.format(
+            self.filter_empty, self.min_keypoints
+        )
 
 
 def get_detection_dataset_dicts(
@@ -121,6 +128,7 @@ def get_detection_dataset_dicts(
     dataset_dicts = list(itertools.chain.from_iterable(dataset_dicts))
 
     if processing_fn is not None:
+        logger.info('Using {} to process dataset dicts'.format(processing_fn))
         dataset_dicts = processing_fn(dataset_dicts)
 
     has_instances = 'annotations' in dataset_dicts[0]
