@@ -7,13 +7,9 @@ data:
       - name: COCOPerson
         json_file: ./data/MSCOCO/annotations/person_keypoints_train2017.json
         image_root: ./data/MSCOCO/train2017/
-    pipelines:
-      - name: CrowdFilter
-      - name: FewKeypointsFilter
-        min_keypoints_per_image: 0
-      - name: AnnotationPopup
-        mask_on: True
-        keypoint_on: True
+    processing_params:
+      filter_empty: True
+      min_keypoints: 0
     mappers:
       - name: ImageLoader
         image_format: BGR
