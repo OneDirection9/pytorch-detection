@@ -117,7 +117,7 @@ class Processing(object):
         return dataset_dicts
 
     def __repr__(self) -> str:
-        return self.__class__.__name__ + '(filter_empty={0}, min_keypoints={1}'.format(
+        return self.__class__.__name__ + '(filter_empty={0}, min_keypoints={1})'.format(
             self.filter_empty, self.min_keypoints
         )
 
@@ -142,7 +142,7 @@ def get_detection_dataset_dicts(
     dataset_dicts = list(itertools.chain.from_iterable(dataset_dicts))
 
     if processing_fn is not None:
-        logger.info('Using {} to process dataset dicts'.format(processing_fn))
+        logger.info("Using '{}' to process dataset dicts".format(processing_fn))
         dataset_dicts = processing_fn(dataset_dicts)
 
     has_instances = 'annotations' in dataset_dicts[0]
