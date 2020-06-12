@@ -129,6 +129,7 @@ class FPN(layers.BaseModule):
 
     def __init__(
         self,
+        # TODO: using in_channels, in_strides
         input_shape: Dict[str, layers.ShapeSpec],
         *,
         in_features: List[str] = ('res2', 'res3', 'res4', 'res5'),

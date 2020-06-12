@@ -7,7 +7,7 @@ import copy
 import logging
 import pickle
 import random
-from typing import Any, Callable, Dict, Iterable
+from typing import Any, Callable, Dict, Iterable, Iterator, List
 
 import numpy as np
 import torch.utils.data as data
@@ -136,7 +136,7 @@ class AspectRatioGroupedDataset(data.IterableDataset):
         # Hard-coded two aspect ratio groups: w > h and w < h.
         # Can add support for more aspect ratio groups, but doesn't seem useful
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[List[Dict[str, Any]]]:
         for d in self.dataset:
             w, h = d['width'], d['height']
             bucket_id = 0 if w > h else 1
