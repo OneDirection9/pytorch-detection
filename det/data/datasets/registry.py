@@ -41,7 +41,16 @@ class VisionDataset(object, metaclass=ABCMeta):
     """
 
     def __init__(self, metadata: Optional[Metadata] = None) -> None:
-        self._metadata = metadata if metadata is not None else Metadata()
+        if metadata is None:
+            metadata = Metadata()
+        elif isinstance(metadata, Metadata):
+            # Copy to avoid original metadata
+            metadata = Metadata(**metadata.as_dict())
+        else:
+            raise TypeError(
+                'metadata should be instance of Metadata or None. Got {}'.format(type(metadata))
+            )
+        self._metadata = metadata
 
     @property
     def metadata(self) -> Metadata:
