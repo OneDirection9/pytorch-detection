@@ -10,37 +10,29 @@ data:
     processing_params:
       filter_empty: True
       min_keypoints: 0
-    mappers:
-      - name: ImageLoader
-        image_format: BGR
-      - name: ResizeShortestEdge
-        short: 800
+    mapper_params:
+      # vision_datasets: will be added by build_detection_train_loader automatically
+      transform_cfg:
+        min_size: [800,]
         max_size: 1333
         sample_style: choice
-      - name: RandomHFlip
-        prob: 0.5
-      - name: ToInstances
+      mask_on: True
+      keypoint_on: True
     dataloader:
-      sampler:
-        name: TrainingSampler
+      sampler: TrainingSampler
       aspect_ratio_grouping: True
-      images_per_batch: 2
+      images_per_batch: 1
       num_workers: 0
-
   test:
     datasets:
-      - name: COCOInstance
+      - name: COCOPerson
         json_file: ./data/MSCOCO/annotations/person_keypoints_val2017.json
         image_root: ./data/MSCOCO/val2017/
-        metadata:
-          name: COCOPersonMetadata
-    mappers:
-      - name: ImageLoader
-      - name: ResizeShortestEdge
-        short: 800
+    mapper_params:
+      transform_cfg:
+        min_size: 800
         max_size: 1333
         sample_style: choice
-      - name: ToInstances
     dataloader:
       num_workers: 0
 

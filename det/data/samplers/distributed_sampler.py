@@ -7,20 +7,13 @@ import itertools
 from typing import Iterator, Optional, Union
 
 import torch
-from foundation.registry import Registry
 from torch.utils.data import Dataset, Sampler
 
 from det.utils import comm
 
-__all__ = ['SamplerRegistry', 'TrainingSampler', 'InferenceSampler']
+__all__ = ['TrainingSampler', 'InferenceSampler']
 
 
-class SamplerRegistry(Registry):
-    """Registry of samplers."""
-    pass
-
-
-@SamplerRegistry.register('TrainingSampler')
 class TrainingSampler(Sampler):
     """Producing an infinite stream of indices.
 
@@ -76,7 +69,6 @@ class TrainingSampler(Sampler):
                 yield from torch.arange(self._size)
 
 
-@SamplerRegistry.register('InferenceSampler')
 class InferenceSampler(Sampler):
     """Produces indices for inference.
 

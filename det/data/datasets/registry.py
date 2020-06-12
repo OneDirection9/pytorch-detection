@@ -44,7 +44,7 @@ class VisionDataset(object, metaclass=ABCMeta):
         if metadata is None:
             metadata = Metadata()
         elif isinstance(metadata, Metadata):
-            # Copy to avoid original metadata
+            # Copy to avoid modify original metadata
             metadata = Metadata(**metadata.as_dict())
         else:
             raise TypeError(
