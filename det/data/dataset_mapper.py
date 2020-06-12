@@ -87,6 +87,7 @@ class DatasetMapper(object):
         """
         if transform_cfg is None:
             transform_cfg = {}
+        transform_cfg['training'] = training
         self.tfm_gens = build_transform_gen(**transform_cfg)
 
         if crop_transform_cfg is not None:
