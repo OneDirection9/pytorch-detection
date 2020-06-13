@@ -67,11 +67,11 @@ class DatasetMapper(object):
         self,
         transform_cfg: Dict[str, Any] = None,
         crop_transform_cfg: Optional[Dict[str, Any]] = None,
-        image_format='BGR',
-        mask_on=False,
-        mask_format='polygon',
-        keypoint_on=False,
-        training=True,
+        image_format: str = 'BGR',
+        mask_on: bool = False,
+        mask_format: str = 'polygon',
+        keypoint_on: bool = False,
+        training: bool = True,
         vision_datasets: Optional[List[VisionDataset]] = None,
     ) -> None:
         """
@@ -85,10 +85,8 @@ class DatasetMapper(object):
             training: Whether in training mode.
             vision_datasets: List of vision datasets, to create keypoint_hflip_indices if needed.
         """
-        if transform_cfg is None:
-            transform_cfg = {}
-        transform_cfg['training'] = training
-        self.tfm_gens = build_transform_gen(**transform_cfg)
+        transform_cfg = transform_cfg or {}
+        self.tfm_gens = build_transform_gen(**transform_cfg, training=training)
 
         if crop_transform_cfg is not None:
             self.crop_gen = T.RandomCrop(**crop_transform_cfg)

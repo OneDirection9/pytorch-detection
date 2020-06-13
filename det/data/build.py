@@ -30,10 +30,8 @@ __all__ = [
 class Processing(object):
     """Filtering out images with only crowd annotations and too few number of keypoints."""
 
-    def __init__(self, filter_empty: bool = False, min_keypoints: int = 0) -> None:
+    def __init__(self, filter_empty: bool = True, min_keypoints: int = 0) -> None:
         """
-        The processing will do nothing by default value (i.e. filter_empty=False, min_keypoints=0).
-
         Args:
             filter_empty: Whether to filter out images without instance annotations.
             min_keypoints: Filter out images with few keypoints than `min_keypoints`. Set to 0 to do
@@ -243,9 +241,7 @@ def build_detection_train_loader(
     if mapper is None:
         # Instantiate mapper
         mapper_params = cfg.get('mapper_params', {})
-        mapper_params['vision_datasets'] = vision_datasets
-        mapper_params['training'] = True
-        mapper = DatasetMapper(**mapper_params)
+        mapper = DatasetMapper(**mapper_params, training=True, vision_datasets=vision_datasets)
     dataset = MapDataset(dataset, mapper)
 
     sampler_name = cfg['dataloader']['sampler']
@@ -277,8 +273,7 @@ def build_detection_test_loader(
     if mapper is None:
         # Instantiate mapper
         mapper_params = cfg.get('mapper_params', {})
-        mapper_params['training'] = False
-        mapper = DatasetMapper(**mapper_params)
+        mapper = DatasetMapper(**mapper_params, training=False)
     dataset = MapDataset(dataset, mapper)
 
     sampler = InferenceSampler(dataset)

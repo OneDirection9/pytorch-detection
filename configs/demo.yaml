@@ -7,15 +7,7 @@ data:
       - name: COCOPerson
         json_file: ./data/MSCOCO/annotations/person_keypoints_train2017.json
         image_root: ./data/MSCOCO/train2017/
-    processing_params:
-      filter_empty: True
-      min_keypoints: 0
     mapper_params:
-      # vision_datasets: will be added by build_detection_train_loader automatically
-      transform_cfg:
-        min_size: [800,]
-        max_size: 1333
-        sample_style: choice
       mask_on: True
       keypoint_on: True
     dataloader:
@@ -29,10 +21,8 @@ data:
         json_file: ./data/MSCOCO/annotations/person_keypoints_val2017.json
         image_root: ./data/MSCOCO/val2017/
     mapper_params:
-      transform_cfg:
-        min_size: 800
-        max_size: 1333
-        sample_style: choice
+      mask_on: True
+      keypoint_on: True
     dataloader:
       num_workers: 0
 
