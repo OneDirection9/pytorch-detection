@@ -30,7 +30,7 @@ __all__ = [
 class Processing(object):
     """Filtering out images with only crowd annotations and too few number of keypoints."""
 
-    def __init__(self, filter_empty: bool = True, min_keypoints: int = 0) -> None:
+    def __init__(self, filter_empty: bool = True, min_keypoints: int = 1) -> None:
         """
         Args:
             filter_empty: Whether to filter out images without instance annotations.
