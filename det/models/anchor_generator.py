@@ -6,7 +6,7 @@ from typing import Iterator, List, Optional, Tuple, Union
 import torch
 from torch import nn
 
-from det.structures import Boxes
+from det.structures import Boxes, RotatedBoxes
 
 _T = Union[List[float], List[List[float]]]
 
@@ -59,8 +59,11 @@ def _broadcast_params(params: _T, num_features: int, name: str) -> List[List[flo
 
 
 def _create_grid_offsets(
-    size: Tuple[int, int], stride: int, offset: float, device: torch.device
-) -> Tuple[torch.Tensor, torch.Tensor]:  # yapf: disable
+    size: Tuple[int, int],
+    stride: int,
+    offset: float,
+    device: torch.device,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     grid_height, grid_width = size
     shifts_x = torch.arange(
         offset * stride, grid_width * stride, step=stride, dtype=torch.float32, device=device
@@ -96,13 +99,13 @@ class DefaultAnchorGenerator(nn.Module):
         self._strides = strides
         self._offset = offset
 
-        self._num_features = len(strides)
-        sizes = _broadcast_params(sizes, self._num_features, 'sizes')
-        aspect_ratios = _broadcast_params(aspect_ratios, self._num_features, 'aspect_ratios')
+        num_features = len(strides)
+        sizes = _broadcast_params(sizes, num_features, 'sizes')
+        aspect_ratios = _broadcast_params(aspect_ratios, num_features, 'aspect_ratios')
         self.cell_anchors = self._calculate_anchors(sizes, aspect_ratios)
 
     @property
-    def num_cell_anchors(self):
+    def num_cell_anchors(self) -> List[int]:
         """Alias of `num_anchors`."""
         return self.num_anchors
 
@@ -118,7 +121,7 @@ class DefaultAnchorGenerator(nn.Module):
     def _calculate_anchors(
         self, sizes: List[List[float]], aspect_ratios: List[List[float]]
     ) -> BufferList:
-        """Calculates base anchors which are centered at (0, 0) for each scale."""
+        """Calculates base anchors which are centered at (0, 0) on each feature map."""
         cell_anchors = [
             self.generate_cell_anchors(s, a).float() for s, a in zip(sizes, aspect_ratios)
         ]
@@ -135,13 +138,9 @@ class DefaultAnchorGenerator(nn.Module):
         sizes and aspect_ratios centered at (0, 0). We can later build the set of anchors for a full
         feature map by shifting and tiling these tensors (see :meth:`_grid_anchors`).
 
-        Args:
-            sizes (tuple[float]):
-            aspect_ratios (tuple[float]]):
-
         Returns:
-            Tensor of shape (len(sizes) * len(aspect_ratios), 4) storing anchor boxes
-                in XYXY format.
+            Tensor of shape (len(sizes) * len(aspect_ratios), 4) storing anchor boxes in XYXY
+            format.
         """
 
         # This is different from the anchor generator defined in the original Faster R-CNN
@@ -154,9 +153,9 @@ class DefaultAnchorGenerator(nn.Module):
         for size in sizes:
             area = size ** 2
             for aspect_ratio in aspect_ratios:
-                # w / h = ar -> w = h * ar
+                # h / w = ar -> h = w * ar
                 # h * w = area
-                # h * h * ar = area -> h = sqrt(area / ar)
+                # w * w * ar = area -> w = sqrt(area / ar)
                 w = math.sqrt(area / aspect_ratio)
                 h = w * aspect_ratio
                 x1, y1, x2, y2 = -w / 2.0, -h / 2.0, w / 2.0, h / 2.0
@@ -184,7 +183,7 @@ class DefaultAnchorGenerator(nn.Module):
     def forward(self, features: List[torch.Tensor]) -> List[Boxes]:
         """
         Args:
-            features (list[Tensor]): List of backbone feature maps on which to generate anchors.
+            features: List of backbone feature maps on which to generate anchors.
 
         Returns:
             A list of Boxes containing all the anchors for each feature map (i.e. the cell anchors
@@ -195,3 +194,111 @@ class DefaultAnchorGenerator(nn.Module):
         grid_sizes = [feature_map.shape[-2:] for feature_map in features]
         anchors_over_all_feature_maps = self._grid_anchors(grid_sizes)
         return [Boxes(x) for x in anchors_over_all_feature_maps]
+
+
+class RotatedAnchorGenerator(nn.Module):
+    """Computes rotated anchors used by Rotated RPN (RRPN), described in
+    "Arbitrary-Oriented Scene Text Detection via Rotation Proposals".
+    """
+    # The dimension of each anchor box.
+    box_dim = 5
+
+    def __init__(
+        self,
+        sizes: _T,
+        aspect_ratios: _T,
+        angles: _T,
+        strides: List[int],
+        offset: float = 0.5,
+    ) -> None:
+        super(RotatedAnchorGenerator, self).__init__()
+
+        if not (0.0 <= offset <= 1.0):
+            raise ValueError('offset should be between 0.0 and 1.0. Got {}'.format(offset))
+
+        self._strides = strides
+        self._offset = offset
+
+        num_features = len(strides)
+        sizes = _broadcast_params(sizes, num_features, 'sizes')
+        aspect_ratios = _broadcast_params(aspect_ratios, num_features, 'aspect_ratios')
+        angles = _broadcast_params(angles, num_features, 'angles')
+        self.cell_anchors = self._calculate_anchors(sizes, aspect_ratios, angles)
+
+    @property
+    def num_cell_anchors(self) -> List[int]:
+        """Alias of `num_anchors`."""
+        return self.num_anchors
+
+    @property
+    def num_anchors(self) -> List[int]:
+        """Returns the number of anchors at every pixel location on each feature map.
+
+        For example, if at every pixel we use anchors of 3 aspect ratios, 2 sizes and 5 angles, the
+        number of anchors is 30. In standard RRPN models, `num_anchors` on every feature map is the
+        same.
+        """
+        return [len(cell_anchors) for cell_anchors in self.cell_anchors]
+
+    def _calculate_anchors(
+        self, sizes: List[List[float]], aspect_ratios: List[List[float]], angles: List[List[float]]
+    ) -> BufferList:
+        cell_anchors = [
+            self.generate_cell_anchors(size, aspect_ratio, angle).float()
+            for size, aspect_ratio, angle in zip(sizes, aspect_ratios, angles)
+        ]
+        return BufferList(cell_anchors)
+
+    def generate_cell_anchors(
+        self,
+        sizes: List[float] = (32, 64, 128, 256, 512),
+        aspect_ratios: List[float] = (0.5, 1, 2),
+        angles: List[float] = (-90, -60, -30, 0, 30, 60, 90),
+    ) -> torch.Tensor:
+        """Generates anchors which are centered at (0, 0).
+
+        Generate a tensor storing canonical anchor boxes, which are all anchor boxes of different
+        sizes, aspect_ratios, angles centered at (0, 0). We can later build the set of anchors for a
+         full feature map by shifting and tiling these tensors (see :meth:`_grid_anchors`).
+
+        Returns:
+            Tensor of shape (len(sizes) * len(aspect_ratios) * len(angles), 5) storing anchor boxes
+            in (x_ctr, y_ctr, w, h, angle) format.
+        """
+        anchors = []
+        for size in sizes:
+            area = size ** 2.0
+            for aspect_ratio in aspect_ratios:
+                # h / w = ar -> h = w * ar
+                # h * w = area
+                # w * w * ar = area -> w = sqrt(area / ar)
+                w = math.sqrt(area / aspect_ratio)
+                h = aspect_ratio * w
+                anchors.extend([0, 0, w, h, a] for a in angles)
+        return torch.tensor(anchors)
+
+    def _grid_anchors(self, grid_sizes: List[Tuple[int, int]]) -> List[torch.Tensor]:
+        anchors = []
+        for size, stride, base_anchors in zip(grid_sizes, self._strides, self.cell_anchors):
+            shift_x, shift_y = _create_grid_offsets(size, stride, self._offset, base_anchors.device)
+            zeros = torch.zeros_like(shift_x)
+            shifts = torch.stack((shift_x, shift_y, zeros, zeros, zeros), dim=1)
+
+            anchors.append((shifts.view(-1, 1, 5) + base_anchors.view(1, -1, 5)).reshape(-1, 5))
+
+        return anchors
+
+    def forward(self, features: List[torch.Tensor]) -> List[RotatedBoxes]:
+        """
+        Args:
+            features: List of backbone feature maps on which to generate anchors.
+
+        Returns:
+            A list of Boxes containing all the anchors for each feature map (i.e. the cell anchors
+            repeated over all locations in the feature map). The number of anchors of each feature
+            map is Hi x Wi x num_cell_anchors, where Hi, Wi are resolution of the feature map
+            divided by anchor stride.
+        """
+        grid_sizes = [feature_map.shape[-2:] for feature_map in features]
+        anchors_over_all_feature_maps = self._grid_anchors(grid_sizes)
+        return [RotatedBoxes(x) for x in anchors_over_all_feature_maps]
