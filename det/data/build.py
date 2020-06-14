@@ -1,3 +1,6 @@
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+#
+# Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
 import itertools
