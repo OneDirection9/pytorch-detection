@@ -21,7 +21,7 @@ class BufferList(nn.Module):
 
     def extend(self, buffers: List[torch.Tensor]) -> 'BufferList':
         offset = len(self)
-        for i, buffer in buffers:
+        for i, buffer in enumerate(buffers):
             self.register_buffer(str(offset + i), buffer)
         return self
 
@@ -91,6 +91,19 @@ class DefaultAnchorGenerator(nn.Module):
     def __init__(
         self, sizes: _T, aspect_ratios: _T, strides: List[int], offset: float = 0.5
     ) -> None:
+        """
+        Args:
+            sizes: If sizes is list[list[float]], sizes[i] is the list of anchor sizes (i.e. sqrt of
+                anchor area) to use for the i-th feature map. If sizes is list[float], the sizes are
+                used for all feature maps. Anchor sizes are given in absolute lengths in units of
+                the input image; they do not dynamically scale if the input image size changes.
+            aspect_ratios: List of aspect ratios (i.e. height / width) to use for anchors. Same
+                "broadcast" rule for `sizes` applies.
+            strides: Stride of each input feature.
+            offset: Relative offset between the center of the first anchor and the top-left corner
+                of the image. Value has to be in [0, 1). Recommend to use 0.5, which means half
+                stride.
+        """
         super(DefaultAnchorGenerator, self).__init__()
 
         if not (0.0 <= offset <= 1.0):
@@ -211,6 +224,21 @@ class RotatedAnchorGenerator(nn.Module):
         strides: List[int],
         offset: float = 0.5,
     ) -> None:
+        """
+        Args:
+            sizes: If sizes is list[list[float]], sizes[i] is the list of anchor sizes (i.e. sqrt of
+                anchor area) to use for the i-th feature map. If sizes is list[float], the sizes are
+                used for all feature maps. Anchor sizes are given in absolute lengths in units of
+                the input image; they do not dynamically scale if the input image size changes.
+            aspect_ratios: List of aspect ratios (i.e. height / width) to use for anchors. Same
+                "broadcast" rule for `sizes` applies.
+            strides: Stride of each input feature.
+            angles: List of angles (in degrees CCW) to use for anchors. Same "broadcast" rule for
+                `sizes` applies.
+            offset: Relative offset between the center of the first anchor and the top-left corner
+                of the image. Value has to be in [0, 1). Recommend to use 0.5, which means half
+                stride.
+        """
         super(RotatedAnchorGenerator, self).__init__()
 
         if not (0.0 <= offset <= 1.0):
