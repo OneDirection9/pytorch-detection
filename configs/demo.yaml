@@ -35,6 +35,7 @@ model:
     out_features: ['res2', 'res3', 'res4', 'res5']
   neck:
     name: RCNN_FPN_Neck
+    in_features: ['res2', 'res3', 'res4', 'res5']
   proposal_generator:
     name: RPN
     anchor_generator:

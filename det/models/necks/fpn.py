@@ -129,10 +129,10 @@ class FPN(layers.BaseModule):
 
     def __init__(
         self,
-        # TODO: using in_channels, in_strides
-        input_shape: Dict[str, layers.ShapeSpec],
         *,
-        in_features: List[str] = ('res2', 'res3', 'res4', 'res5'),
+        in_channels: List[int],
+        in_strides: List[int],
+        in_features: List[str],
         out_channels: int = 256,
         norm: Union[str, Callable] = '',
         fuse_type: str = 'sum',
@@ -140,7 +140,8 @@ class FPN(layers.BaseModule):
     ) -> None:
         """
         Args:
-            input_shape: Mapping from feature name (e.g. "res2") to feature map shape.
+            in_channels: List of input channels of each feature map.
+            in_strides: List of strides of each feature map.
             in_features: Name of the input feature maps coming from the backbone to which FPN is
                 attached. For example, if the backbone produces ["res2", "res3", "res4"], any
                 *contiguous* sublist of these may be used; order must be from high to low
@@ -160,11 +161,11 @@ class FPN(layers.BaseModule):
         """
         super(FPN, self).__init__()
 
+        if not (len(in_channels) == len(in_strides) == len(in_features)):
+            raise ValueError('in_channels, in_strides, and in_features should have the same length')
         if fuse_type not in ['avg', 'sum']:
             raise ValueError('fuse_type should be either avg or sum. Got {}'.format(fuse_type))
 
-        in_channels = [input_shape[f].channels for f in in_features]
-        in_strides = [input_shape[f].stride for f in in_features]
         _assert_strides_are_log2_contiguous(in_strides)
 
         self._size_divisibility = in_strides[-1]
@@ -269,12 +270,20 @@ def rcnn_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs: Any) -> FP
     """Returns an instance of :class:`FPN` neck with top_block is LastLevelMaxPool."""
     if 'top_block' in kwargs:
         raise ValueError('top_block will be set to LastLevelMaxPool automatically')
+    if 'in_channels' in kwargs or 'in_strides' in kwargs:
+        raise ValueError('in_channels and in_strides are inferred from backbone output shape')
+
+    in_features = kwargs['in_features']
+    in_channels = [input_shape[f].channels for f in in_features]
+    in_strides = [input_shape[f].stride for f in in_features]
 
     sig = inspect.signature(FPN.__init__)
     out_channels = kwargs.get('out_channels', sig.parameters['out_channels'].default)
-
     top_block = LastLevelMaxPool(out_channels)
-    return FPN(input_shape, **kwargs, top_block=top_block)
+
+    kwargs.update({'in_channels': in_channels, 'in_strides': in_strides, 'top_block': top_block})
+
+    return FPN(**kwargs)
 
 
 @NeckRegistry.register('RetinaNet_FPN_Neck')
@@ -282,9 +291,17 @@ def retinanet_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs: Any) 
     """Returns an instance of :class:`FPN` neck with top_block is LastLevelP6P7."""
     if 'top_block' in kwargs:
         raise ValueError('top_block will be set to LastLevelP6P7 automatically')
+    if 'in_channels' in kwargs or 'in_strides' in kwargs:
+        raise ValueError('in_channels and in_strides are inferred from backbone output shape')
+
+    in_features = kwargs['in_features']
+    in_channels = [input_shape[f].channels for f in in_features]
+    in_strides = [input_shape[f].stride for f in in_features]
 
     sig = inspect.signature(FPN.__init__)
     out_channels = kwargs.get('out_channels', sig.parameters['out_channels'].default)
-
     top_block = LastLevelP6P7(input_shape['res5'].channels, out_channels)
-    return FPN(input_shape, **kwargs, top_block=top_block)
+
+    kwargs.update({'in_channels': in_channels, 'in_strides': in_strides, 'top_block': top_block})
+
+    return FPN(**kwargs)
