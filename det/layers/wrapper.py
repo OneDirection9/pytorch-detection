@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 import torch
 from torch import nn
 
-__all__ = ['Conv2d', 'ShapeSpec', 'BaseModule']
+__all__ = ['Conv2d', 'ShapeSpec', 'BaseModule', 'nonzero_tuple']
 
 
 class Conv2d(nn.Conv2d):
@@ -108,3 +108,13 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
         input size divisibility is required.
         """
         return 0
+
+
+def nonzero_tuple(x: torch.Tensor) -> torch.Tensor:
+    """
+    A 'as_tuple=True' version of torch.nonzero to support torchscript.
+    because of https://github.com/pytorch/pytorch/issues/38718
+    """
+    if x.dim() == 0:
+        return x.unsqueeze(0).nonzero().unbind(1)
+    return x.nonzero().unbind(1)
