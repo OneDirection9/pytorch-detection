@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import torch
-from PIL import Image
 
 from . import transforms as T, utils
 from .datasets import VisionDataset
@@ -172,7 +171,7 @@ class DatasetMapper(object):
             dataset_dict['instances'] = utils.filter_empty_instances(instances)
 
         if 'sem_seg_file_name' in dataset_dict:
-            sem_seg_gt = Image.open(dataset_dict['sem_seg_file_name'])
+            sem_seg_gt = utils.read_image(dataset_dict.pop('sem_seg_file_name'), 'L').squeeze(2)
             sem_seg_gt = transforms.apply_segmentation(sem_seg_gt)
             sem_seg_gt = torch.as_tensor(sem_seg_gt.astype('long'))
             dataset_dict['sem_seg'] = sem_seg_gt

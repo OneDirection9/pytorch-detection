@@ -44,13 +44,15 @@ class Keypoints(object):
 
     def to_heatmap(self, boxes: torch.Tensor,
                    heatmap_size: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
+        """Converts keypoint annotations to a heatmap of one-hot labels for training,
+        as described in :paper:`Mask R-CNN`.
+
         Arguments:
             boxes: Nx4 tensor, the boxes to draw the keypoints to
 
         Returns:
             heatmaps:
-                A tensor of shape (N, K) containing an integer spatial label
+                A tensor of shape (N, K), each element is integer spatial label
                 in the range [0, heatmap_size**2 - 1] for each keypoint in the input.
             valid:
                 A tensor of shape (N, K) containing whether each keypoint is in the roi or not.

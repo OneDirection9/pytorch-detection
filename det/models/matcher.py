@@ -9,6 +9,8 @@ import torch
 
 from det.layers import nonzero_tuple
 
+__all__ = ['Matcher']
+
 
 class Matcher(object):
     """Assigning to each predicted "element" (e.g., a box) a ground-truth element.
