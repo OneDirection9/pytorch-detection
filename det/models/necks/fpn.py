@@ -175,7 +175,7 @@ class FPN(layers.BaseModule):
         self.top_block = top_block
         self._output_shape = {}
         self._lateral_names = []
-        self._output_names = []
+        self._fpn_names = []
 
         use_bias = norm == ''
         for stride, channels in zip(in_strides, in_channels):
@@ -203,10 +203,10 @@ class FPN(layers.BaseModule):
             self.add_module(lateral_name, lateral_conv)
             self._lateral_names.append(lateral_name)
 
-            output_name = 'p{}'.format(stage)
-            self.add_module(output_name, output_conv)
-            self._output_names.append(output_name)
-            self._output_shape[output_name] = layers.ShapeSpec(channels=out_channels, stride=stride)
+            fpn_name = 'p{}'.format(stage)
+            self.add_module(fpn_name, output_conv)
+            self._fpn_names.append(fpn_name)
+            self._output_shape[fpn_name] = layers.ShapeSpec(channels=out_channels, stride=stride)
 
         assert set(self._output_shape.keys()).issubset([name for name, _ in self.named_children()])
 
@@ -234,7 +234,7 @@ class FPN(layers.BaseModule):
         # part1: from original levels
         outputs = {
             name: getattr(self, name)(lateral)
-            for name, lateral in zip(self._output_names, laterals)
+            for name, lateral in zip(self._fpn_names, laterals)
         }
         # part2: from top_block
         if self.top_block is not None:
