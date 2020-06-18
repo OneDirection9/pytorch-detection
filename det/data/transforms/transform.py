@@ -10,7 +10,6 @@ import numpy as np
 from foundation.transforms import (
     CV2_INTER_CODES,
     HFlipTransform,
-    NoOpTransform,
     ResizeTransform,
     Transform,
     is_numpy,
@@ -238,5 +237,4 @@ def Resize_rotated_box(transform: ResizeTransform, rotated_boxes: np.ndarray) ->
 
 
 HFlipTransform.register_type('rotated_box', HFlip_rotated_box)
-NoOpTransform.register_type('rotated_box', lambda t, x: x)
 ResizeTransform.register_type('rotated_box', Resize_rotated_box)
