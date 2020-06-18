@@ -3,12 +3,22 @@ from __future__ import absolute_import, division, print_function
 import copy
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import torch
 from torch import nn
 
-__all__ = ['Conv2d', 'ShapeSpec', 'BaseModule', 'nonzero_tuple']
+__all__ = ['cat', 'Conv2d', 'ShapeSpec', 'BaseModule', 'nonzero_tuple']
+
+
+def cat(tensors: List[torch.Tensor], dim: int = 0):
+    """
+    Efficient version of torch.cat that avoids a copy if there is only a single element in a list
+    """
+    assert isinstance(tensors, (list, tuple))
+    if len(tensors) == 1:
+        return tensors[0]
+    return torch.cat(tensors, dim)
 
 
 class Conv2d(nn.Conv2d):

@@ -44,7 +44,7 @@ class Matcher(object):
 
         Examples:
             thresholds = [0.3, 0.5]
-            labels = [0, -1 1]
+            labels = [0, -1, 1]
             All predictions with iou < 0.3 will be marked with 0 and thus will be considered as
             false positives while training. All predictions with 0.3 <= iou < 0.5 will be marked
             with -1 and thus will be ignored. All predictions with 0.5 <= iou will be marked with 1
