@@ -3,10 +3,9 @@
 # Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
-import inspect
 import math
 from abc import ABCMeta, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import torch
 from foundation.nn import weight_init
@@ -266,42 +265,64 @@ Wrappers of FPN presetting top_block
 
 
 @NeckRegistry.register('RCNN_FPN_Neck')
-def rcnn_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs: Any) -> FPN:
-    """Returns an instance of :class:`FPN` neck with top_block is LastLevelMaxPool."""
-    if 'top_block' in kwargs:
-        raise ValueError('top_block will be set to LastLevelMaxPool automatically')
-    if 'in_channels' in kwargs or 'in_strides' in kwargs:
-        raise ValueError('in_channels and in_strides are inferred from backbone output shape')
+def rcnn_fpn_neck(
+    input_shape: Dict[str, layers.ShapeSpec],
+    in_features: List[str],
+    out_channels: int = 256,
+    norm: Union[str, Callable] = '',
+    fuse_type: str = 'sum',
+) -> FPN:
+    """Returns an instance of :class:`FPN` neck with top_block is LastLevelMaxPool.
 
-    in_features = kwargs['in_features']
+    Args:
+        input_shape: Output shape of backbone, e.g. resnet.
+        in_features: See :class:`FPN`.
+        out_channels: See :class:`FPN`.
+        norm: See :class:`FPN`.
+        fuse_type: See :class:`FPN`.
+    """
     in_channels = [input_shape[f].channels for f in in_features]
     in_strides = [input_shape[f].stride for f in in_features]
-
-    sig = inspect.signature(FPN.__init__)
-    out_channels = kwargs.get('out_channels', sig.parameters['out_channels'].default)
     top_block = LastLevelMaxPool(out_channels)
 
-    kwargs.update({'in_channels': in_channels, 'in_strides': in_strides, 'top_block': top_block})
-
-    return FPN(**kwargs)
+    return FPN(
+        in_channels=in_channels,
+        in_strides=in_strides,
+        in_features=in_features,
+        out_channels=out_channels,
+        norm=norm,
+        fuse_type=fuse_type,
+        top_block=top_block,
+    )
 
 
 @NeckRegistry.register('RetinaNet_FPN_Neck')
-def retinanet_fpn_neck(input_shape: Dict[str, layers.ShapeSpec], **kwargs: Any) -> FPN:
-    """Returns an instance of :class:`FPN` neck with top_block is LastLevelP6P7."""
-    if 'top_block' in kwargs:
-        raise ValueError('top_block will be set to LastLevelP6P7 automatically')
-    if 'in_channels' in kwargs or 'in_strides' in kwargs:
-        raise ValueError('in_channels and in_strides are inferred from backbone output shape')
+def retinanet_fpn_neck(
+    input_shape: Dict[str, layers.ShapeSpec],
+    in_features: List[str],
+    out_channels: int = 256,
+    norm: Union[str, Callable] = '',
+    fuse_type: str = 'sum',
+) -> FPN:
+    """Returns an instance of :class:`FPN` neck with top_block is LastLevelP6P7.
 
-    in_features = kwargs['in_features']
+    Args:
+        input_shape: Output shape of backbone, e.g. resnet.
+        in_features: See :class:`FPN`.
+        out_channels: See :class:`FPN`.
+        norm: See :class:`FPN`.
+        fuse_type: See :class:`FPN`.
+    """
     in_channels = [input_shape[f].channels for f in in_features]
     in_strides = [input_shape[f].stride for f in in_features]
-
-    sig = inspect.signature(FPN.__init__)
-    out_channels = kwargs.get('out_channels', sig.parameters['out_channels'].default)
     top_block = LastLevelP6P7(input_shape['res5'].channels, out_channels)
 
-    kwargs.update({'in_channels': in_channels, 'in_strides': in_strides, 'top_block': top_block})
-
-    return FPN(**kwargs)
+    return FPN(
+        in_channels=in_channels,
+        in_strides=in_strides,
+        in_features=in_features,
+        out_channels=out_channels,
+        norm=norm,
+        fuse_type=fuse_type,
+        top_block=top_block,
+    )

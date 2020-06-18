@@ -100,7 +100,6 @@ class StandardRPNHead(nn.Module):
         return pred_objectness_logits, pred_anchor_deltas
 
 
-@ProposalGeneratorRegistry.register('RPN')
 class RPN(nn.Module):
     """Region Proposal Network, introduced by :paper:`Faster R-CNN`."""
 
@@ -381,3 +380,8 @@ class RPN(nn.Module):
             # Append feature map proposals with shape (N, Hi*Wi*A, B)
             proposals.append(proposals_i.view(N, -1, B))
         return proposals
+
+
+@ProposalGeneratorRegistry.register('RCNN_RPN')
+def rcnn_rpn():
+    pass
