@@ -118,7 +118,6 @@ class LastLevelP6P7(TopBlock):
         return self._output_shape
 
 
-@NeckRegistry.register('FPN')
 class FPN(layers.BaseModule):
     """`Feature Pyramid Networks for Object Detection`_.
 
