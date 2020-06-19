@@ -10,7 +10,7 @@ from foundation.nn import smooth_l1_loss, weight_init
 from torch import nn
 from torch.nn import functional as F
 
-from det.layers import cat
+from det.layers import ShapeSpec, cat
 from det.structures import Boxes, ImageList, Instances, RotatedBoxes, pairwise_iou
 from ..box_regression import Box2BoxTransform
 from ..matcher import Matcher
@@ -383,5 +383,5 @@ class RPN(nn.Module):
 
 
 @ProposalGeneratorRegistry.register('RCNN_RPN')
-def rcnn_rpn():
+def rcnn_rpn(input_shape: Dict[str, ShapeSpec]):
     pass
