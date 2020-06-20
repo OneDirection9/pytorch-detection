@@ -5,7 +5,7 @@ from __future__ import absolute_import, division, print_function
 
 import copy
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -27,12 +27,6 @@ def build_transform_gen(
     """Creates a list of :class:`TransformGen` from config.
 
     Now it includes resizing and flipping.
-
-    Args:
-        min_size: See :class:`ResizeShortestEdge`.
-        max_size: See :class:`ResizeShortestEdge`.
-        sample_style: See :class:`ResizeShortestEdge`.
-        training: Whether it is in training mode.
     """
     if not training:
         sample_style = 'choice'
@@ -67,8 +61,11 @@ class DatasetMapper(object):
 
     def __init__(
         self,
-        transform_cfg: Dict[str, Any] = None,
-        crop_transform_cfg: Optional[Dict[str, Any]] = None,
+        min_size: Union[List[int], int] = (800,),
+        max_size: int = 1333,
+        sample_style: str = 'choice',
+        crop_type: Optional[str] = None,
+        crop_size: Optional[Tuple[float, float]] = None,
         image_format: str = 'BGR',
         mask_on: bool = False,
         mask_format: str = 'polygon',
@@ -78,8 +75,11 @@ class DatasetMapper(object):
     ) -> None:
         """
         Args:
-            transform_cfg: See :func:`build_transform_gen`.
-            crop_transform_cfg: See :class:`RandomCrop`.
+            min_size: See :class:`ResizeShortestEdge`.
+            max_size: See :class:`ResizeShortestEdge`.
+            sample_style: See :class:`ResizeShortestEdge`.
+            crop_type: See :class:`RandomCrop`. If None, RandomCrop is disabled.
+            crop_size: See :class:`RandomCrop`. If None, RandomCrop is disabled
             image_format: See :class:`read_image`.
             mask_on: Whether keep segmentation.
             mask_format: See :func:`annotations_to_instances`.
@@ -87,11 +87,13 @@ class DatasetMapper(object):
             training: Whether in training mode.
             vision_datasets: List of vision datasets, to create keypoint_hflip_indices if needed.
         """
-        transform_cfg = transform_cfg or {}
-        self.tfm_gens = build_transform_gen(**transform_cfg, training=training)
+        if (crop_type is None) ^ (crop_size is None):
+            raise ValueError('crop_type and crop_size should be None or other together')
 
-        if crop_transform_cfg is not None:
-            self.crop_gen = T.RandomCrop(**crop_transform_cfg)
+        self.tfm_gens = build_transform_gen(min_size, max_size, sample_style, training=training)
+
+        if crop_type is not None:
+            self.crop_gen = T.RandomCrop(crop_type, crop_size)
         else:
             self.crop_gen = None
 
