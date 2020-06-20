@@ -6,16 +6,15 @@ from foundation.registry import Registry
 
 from det.layers import BaseModule, ShapeSpec
 
-__all__ = ['NeckRegistry', 'Neck', 'build_neck']
+__all__ = ['Neck', 'NeckRegistry', 'build_neck']
+
+# Alias of BaseModule
+Neck = BaseModule
 
 
 class NeckRegistry(Registry):
     """Registry of necks."""
     pass
-
-
-# Alias of BaseModule
-Neck = BaseModule
 
 
 def build_neck(cfg: Dict[str, Any], input_shape: Dict[str, ShapeSpec]) -> Neck:

@@ -6,16 +6,15 @@ from foundation.registry import Registry
 
 from det.layers import BaseModule, ShapeSpec
 
-__all__ = ['BackboneRegistry', 'Backbone', 'build_backbone']
+__all__ = ['Backbone', 'BackboneRegistry', 'build_backbone']
+
+# Alias of BaseModule
+Backbone = BaseModule
 
 
 class BackboneRegistry(Registry):
     """Registry of backbones."""
     pass
-
-
-# Alias of BaseModule
-Backbone = BaseModule
 
 
 def build_backbone(cfg: Dict[str, Any], input_shape: Optional[ShapeSpec] = None) -> Backbone:

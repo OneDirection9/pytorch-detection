@@ -8,19 +8,10 @@ from foundation.registry import Registry, build
 from .metadata import Metadata
 
 __all__ = [
-    'VisionDatasetRegistry',
     'VisionDataset',
+    'VisionDatasetRegistry',
     'build_vision_datasets',
 ]
-
-
-class VisionDatasetRegistry(Registry):
-    """Registry of vision datasets.
-
-    A vision dataset should have get_items method returning list of samples in dictionary, and
-    metadata attribute. See :class:`VisionDataset`.
-    """
-    pass
 
 
 class VisionDataset(object, metaclass=ABCMeta):
@@ -66,6 +57,15 @@ class VisionDataset(object, metaclass=ABCMeta):
         return '{}(metadata={})'.format(self.__class__.__name__, self.metadata)
 
     __str__ = __repr__
+
+
+class VisionDatasetRegistry(Registry):
+    """Registry of vision datasets.
+
+    A vision dataset should have get_items method returning list of samples in dictionary, and
+    metadata attribute. See :class:`VisionDataset`.
+    """
+    pass
 
 
 def build_vision_datasets(cfg: Union[Dict[str, Any], List[Dict[str, Any]]]) -> List[VisionDataset]:
