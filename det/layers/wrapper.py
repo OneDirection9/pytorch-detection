@@ -1,6 +1,5 @@
 from __future__ import absolute_import, division, print_function
 
-import copy
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple
 from typing import Any, Dict, List, Optional
@@ -76,19 +75,6 @@ class ShapeSpec(namedtuple('_ShapeSpec', ['channels', 'height', 'width', 'stride
         stride: Optional[int] = None,
     ) -> 'ShapeSpec':
         return super(ShapeSpec, cls).__new__(cls, channels, height, width, stride)
-
-    def __copy__(self):
-        return ShapeSpec(
-            channels=self.channels, height=self.height, width=self.width, stride=self.stride
-        )
-
-    def __deepcopy__(self, memodict={}):
-        return ShapeSpec(
-            channels=copy.deepcopy(self.channels),
-            height=copy.deepcopy(self.height),
-            width=copy.deepcopy(self.width),
-            stride=copy.deepcopy(self.stride),
-        )
 
 
 class BaseModule(nn.Module, metaclass=ABCMeta):
