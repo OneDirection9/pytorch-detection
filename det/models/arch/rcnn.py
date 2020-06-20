@@ -6,14 +6,11 @@ from __future__ import absolute_import, division, print_function
 from typing import List, Optional
 
 import torch
-from foundation.registry import build
 from torch import nn
 
-from det import layers
 from det.structures import ImageList
-from ..backbones import BackboneRegistry
-from ..necks import NeckRegistry
-from .registry import ArchRegistry
+from ..backbones import Backbone
+from ..necks import Neck
 
 __all__ = ['GeneralizedRCNN']
 
@@ -27,8 +24,8 @@ class GeneralizedRCNN(nn.Module):
 
     def __init__(
         self,
-        backbone: layers.BaseModule,
-        neck: Optional[layers.BaseModule] = None,
+        backbone: Backbone,
+        neck: Optional[Neck] = None,
         proposal_generator=None,
         roi_head=None,
         pixel_mean: List[float] = (103.530, 116.280, 123.675),
@@ -82,20 +79,3 @@ class GeneralizedRCNN(nn.Module):
         self.proposal_generator(images, features, gt_instances)
 
         return features
-
-
-@ArchRegistry.register('FasterRCNN')
-def build_faster_rcnn(**kwargs):
-    backbone = build(BackboneRegistry, kwargs.pop('backbone'))
-
-    neck = kwargs.pop('neck', None)
-    if neck is not None:
-        neck['input_shape'] = backbone.output_shape
-        neck = build(NeckRegistry, neck)
-
-    proposal_generator = None
-    # proposal_generator = kwargs.pop('proposal_generator', None)
-    # if proposal_generator is not None:
-    #     proposal_generator = build(ProposalGeneratorRegistry, proposal_generator)
-
-    return GeneralizedRCNN(backbone, neck, proposal_generator, **kwargs)

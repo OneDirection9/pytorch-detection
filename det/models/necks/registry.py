@@ -18,7 +18,12 @@ class NeckRegistry(Registry):
 
 
 def build_neck(cfg: Dict[str, Any], input_shape: Dict[str, ShapeSpec]) -> Neck:
-    """Builds a neck from config."""
+    """Builds a neck from config.
+
+    Args:
+        cfg:
+        input_shape: Output shape of backbone.
+    """
     neck_name = cfg.pop('name')
     neck = NeckRegistry.get(neck_name)(input_shape, **cfg)
     assert isinstance(neck, Neck)
