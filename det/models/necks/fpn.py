@@ -12,8 +12,8 @@ from foundation.nn import weight_init
 from torch import nn
 from torch.nn import functional as F
 
-from det import layers
-from .registry import NeckRegistry
+from det.layers import BaseModule, Conv2d, ShapeSpec, get_norm
+from .registry import Neck, NeckRegistry
 
 __all__ = [
     'TopBlock',
@@ -25,7 +25,7 @@ __all__ = [
 ]
 
 
-class TopBlock(layers.BaseModule, metaclass=ABCMeta):
+class TopBlock(BaseModule, metaclass=ABCMeta):
     """Base class for the extra block in the FPN."""
 
     @abstractmethod
@@ -60,7 +60,7 @@ class LastLevelMaxPool(TopBlock):
         self._in_feature = 'p5'
 
         self.p6 = nn.MaxPool2d(kernel_size=1, stride=2, padding=0)
-        self._output_shape = {'p6': layers.ShapeSpec(channels=in_channels, stride=2)}
+        self._output_shape = {'p6': ShapeSpec(channels=in_channels, stride=2)}
         assert set(self._output_shape.keys()).issubset([name for name, _ in self.named_children()])
 
     def forward(
@@ -71,7 +71,7 @@ class LastLevelMaxPool(TopBlock):
         return {'p6': self.p6(fpn_body_features[self._in_feature])}
 
     @property
-    def output_shape(self) -> Dict[str, layers.ShapeSpec]:
+    def output_shape(self) -> Dict[str, ShapeSpec]:
         return self._output_shape
 
 
@@ -93,8 +93,8 @@ class LastLevelP6P7(TopBlock):
         for module in [self.p6, self.p7]:
             weight_init.caffe2_xavier_init(module)
         self._output_shape = {
-            'p6': layers.ShapeSpec(channels=out_channels, stride=2),
-            'p7': layers.ShapeSpec(channels=out_channels, stride=4),
+            'p6': ShapeSpec(channels=out_channels, stride=2),
+            'p7': ShapeSpec(channels=out_channels, stride=4),
         }
         assert set(self._output_shape.keys()).issubset([name for name, _ in self.named_children()])
 
@@ -114,11 +114,11 @@ class LastLevelP6P7(TopBlock):
         return outputs
 
     @property
-    def output_shape(self) -> Dict[str, layers.ShapeSpec]:
+    def output_shape(self) -> Dict[str, ShapeSpec]:
         return self._output_shape
 
 
-class FPN(layers.BaseModule):
+class FPN(Neck):
     """`Feature Pyramid Networks for Object Detection`_.
 
     .._`Feature Pyramid Networks for Object Detection`:
@@ -177,13 +177,13 @@ class FPN(layers.BaseModule):
 
         use_bias = norm == ''
         for stride, channels in zip(in_strides, in_channels):
-            lateral_norm = layers.get_norm(norm, out_channels)
-            output_norm = layers.get_norm(norm, out_channels)
+            lateral_norm = get_norm(norm, out_channels)
+            output_norm = get_norm(norm, out_channels)
 
-            lateral_conv = layers.Conv2d(
+            lateral_conv = Conv2d(
                 channels, out_channels, kernel_size=1, bias=use_bias, norm=lateral_norm
             )
-            output_conv = layers.Conv2d(
+            output_conv = Conv2d(
                 out_channels,
                 out_channels,
                 kernel_size=3,
@@ -204,7 +204,7 @@ class FPN(layers.BaseModule):
             fpn_name = 'p{}'.format(stage)
             self.add_module(fpn_name, output_conv)
             self._fpn_names.append(fpn_name)
-            self._output_shape[fpn_name] = layers.ShapeSpec(channels=out_channels, stride=stride)
+            self._output_shape[fpn_name] = ShapeSpec(channels=out_channels, stride=stride)
 
         assert set(self._output_shape.keys()).issubset([name for name, _ in self.named_children()])
 
@@ -213,7 +213,7 @@ class FPN(layers.BaseModule):
             for k, v in self.top_block.output_shape.items():
                 current_stride = current_stride * v.stride
                 assert k not in self._output_shape, '{} already in the FPN output_shape'.format(k)
-                self._output_shape[k] = layers.ShapeSpec(channels=v.channels, stride=current_stride)
+                self._output_shape[k] = ShapeSpec(channels=v.channels, stride=current_stride)
 
     def forward(self, bottom_up_features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # Build laterals
@@ -243,7 +243,7 @@ class FPN(layers.BaseModule):
         return outputs
 
     @property
-    def output_shape(self) -> Dict[str, layers.ShapeSpec]:
+    def output_shape(self) -> Dict[str, ShapeSpec]:
         return self._output_shape
 
     @property
@@ -265,7 +265,8 @@ Wrappers of FPN presetting top_block
 
 @NeckRegistry.register('RCNN_FPN_Neck')
 def rcnn_fpn_neck(
-    input_shape: Dict[str, layers.ShapeSpec],
+    input_shape: Dict[str, ShapeSpec],
+    *,
     in_features: List[str],
     out_channels: int = 256,
     norm: Union[str, Callable] = '',
@@ -297,7 +298,8 @@ def rcnn_fpn_neck(
 
 @NeckRegistry.register('RetinaNet_FPN_Neck')
 def retinanet_fpn_neck(
-    input_shape: Dict[str, layers.ShapeSpec],
+    input_shape: Dict[str, ShapeSpec],
+    *,
     in_features: List[str],
     out_channels: int = 256,
     norm: Union[str, Callable] = '',

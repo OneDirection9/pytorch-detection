@@ -12,8 +12,8 @@ from foundation.nn import weight_init
 from torch import nn
 from torch.nn import functional as F
 
-from det import layers
-from .registry import BackboneRegistry
+from det.layers import BaseCNNBlock, Conv2d, ShapeSpec, get_norm
+from .registry import Backbone, BackboneRegistry
 
 __all__ = [
     'BasicBlock',
@@ -26,7 +26,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-class BasicBlock(layers.BaseCNNBlock):
+class BasicBlock(BaseCNNBlock):
     """The basic residual block for ResNet-18 and ResNet-34.
 
     The block has two 3x3 conv layers and a projection shortcut if needed defined in
@@ -54,35 +54,35 @@ class BasicBlock(layers.BaseCNNBlock):
         super(BasicBlock, self).__init__(in_channels, out_channels, stride)
 
         if stride != 1 or in_channels != out_channels:
-            self.shortcut = layers.Conv2d(
+            self.shortcut = Conv2d(
                 in_channels,
                 out_channels,
                 kernel_size=1,
                 stride=stride,
                 bias=False,
-                norm=layers.get_norm(norm, out_channels),
+                norm=get_norm(norm, out_channels),
             )
         else:
             self.shortcut = None
 
-        self.conv1 = layers.Conv2d(
+        self.conv1 = Conv2d(
             in_channels,
             out_channels,
             kernel_size=3,
             stride=stride,
             padding=1,
             bias=False,
-            norm=layers.get_norm(norm, out_channels),
+            norm=get_norm(norm, out_channels),
         )
 
-        self.conv2 = layers.Conv2d(
+        self.conv2 = Conv2d(
             out_channels,
             out_channels,
             kernel_size=3,
             stride=1,
             padding=1,
             bias=False,
-            norm=layers.get_norm(norm, out_channels),
+            norm=get_norm(norm, out_channels),
         )
 
         for layer in [self.conv1, self.conv2, self.shortcut]:
@@ -104,7 +104,7 @@ class BasicBlock(layers.BaseCNNBlock):
         return out
 
 
-class BottleneckBlock(layers.BaseCNNBlock):
+class BottleneckBlock(BaseCNNBlock):
     """The standard bottleneck block used by ResNet-50, 101 and 152.
 
     The block has 3 conv layers with kernels 1x1, 3x3, 1x1, and a projection shortcut if needed
@@ -141,13 +141,13 @@ class BottleneckBlock(layers.BaseCNNBlock):
         super(BottleneckBlock, self).__init__(in_channels, out_channels, stride)
 
         if stride != 1 or in_channels != out_channels:
-            self.shortcut = layers.Conv2d(
+            self.shortcut = Conv2d(
                 in_channels,
                 out_channels,
                 kernel_size=1,
                 stride=stride,
                 bias=False,
-                norm=layers.get_norm(norm, out_channels),
+                norm=get_norm(norm, out_channels),
             )
         else:
             self.shortcut = None
@@ -157,15 +157,15 @@ class BottleneckBlock(layers.BaseCNNBlock):
         # stride in the 3x3 conv
         stride_1x1, stride_3x3 = (stride, 1) if stride_in_1x1 else (1, stride)
 
-        self.conv1 = layers.Conv2d(
+        self.conv1 = Conv2d(
             in_channels,
             bottleneck_channels,
             kernel_size=1,
             stride=stride_1x1,
             bias=False,
-            norm=layers.get_norm(norm, bottleneck_channels),
+            norm=get_norm(norm, bottleneck_channels),
         )
-        self.conv2 = layers.Conv2d(
+        self.conv2 = Conv2d(
             bottleneck_channels,
             bottleneck_channels,
             kernel_size=3,
@@ -174,14 +174,14 @@ class BottleneckBlock(layers.BaseCNNBlock):
             bias=False,
             groups=num_groups,
             dilation=dilation,
-            norm=layers.get_norm(norm, bottleneck_channels),
+            norm=get_norm(norm, bottleneck_channels),
         )
-        self.conv3 = layers.Conv2d(
+        self.conv3 = Conv2d(
             bottleneck_channels,
             out_channels,
             kernel_size=1,
             bias=False,
-            norm=layers.get_norm(norm, out_channels)
+            norm=get_norm(norm, out_channels)
         )
 
         for layer in [self.conv1, self.conv2, self.conv3, self.shortcut]:
@@ -219,7 +219,7 @@ class BottleneckBlock(layers.BaseCNNBlock):
         return out
 
 
-class BasicStem(layers.BaseCNNBlock):
+class BasicStem(BaseCNNBlock):
     """The standard ResNet stem (layers before the first residual block)."""
 
     def __init__(
@@ -236,14 +236,14 @@ class BasicStem(layers.BaseCNNBlock):
         """
         super(BasicStem, self).__init__(in_channels, out_channels, 4)
 
-        self.conv1 = layers.Conv2d(
+        self.conv1 = Conv2d(
             in_channels,
             out_channels,
             kernel_size=7,
             stride=2,
             padding=3,
             bias=False,
-            norm=layers.get_norm(norm, out_channels),
+            norm=get_norm(norm, out_channels),
         )
         weight_init.caffe2_msra_init(self.conv1)
 
@@ -254,7 +254,7 @@ class BasicStem(layers.BaseCNNBlock):
         return x
 
 
-class ResNet(layers.BaseModule):
+class ResNet(Backbone):
     """`Deep Residual Learning for Image Recognition`_.
 
     .. _`Deep Residual Learning for Image Recognition`:
@@ -271,7 +271,7 @@ class ResNet(layers.BaseModule):
 
     def __init__(
         self,
-        stem: layers.BaseCNNBlock,
+        stem: BaseCNNBlock,
         stages: List[nn.Sequential],
         num_classes: Optional[int] = None,
         out_features: Optional[List[str]] = None,
@@ -300,14 +300,14 @@ class ResNet(layers.BaseModule):
         self.add_module(name, stem)
         current_channels = stem.out_channels
         current_stride = stem.stride
-        output_shape[name] = layers.ShapeSpec(channels=current_channels, stride=current_stride)
+        output_shape[name] = ShapeSpec(channels=current_channels, stride=current_stride)
 
         self._stage_names = []
         for i, stage in enumerate(stages, start=2):
             if len(stage) == 0:
                 raise ValueError('Stage is empty')
             for block in stage:
-                if not isinstance(block, layers.BaseCNNBlock):
+                if not isinstance(block, BaseCNNBlock):
                     raise TypeError('Block should be CNNBlockBase. Got {}'.format(type(block)))
 
             name = 'res{}'.format(i)
@@ -315,7 +315,7 @@ class ResNet(layers.BaseModule):
             self._stage_names.append(name)
             current_channels = stage[-1].out_channels
             current_stride = current_stride * np.prod([b.stride for b in stage])
-            output_shape[name] = layers.ShapeSpec(channels=current_channels, stride=current_stride)
+            output_shape[name] = ShapeSpec(channels=current_channels, stride=current_stride)
 
         if num_classes is not None:
             self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
@@ -326,7 +326,7 @@ class ResNet(layers.BaseModule):
             # drawing weights from a zero-mean Gaussian with standard deviation of 0.01."
             nn.init.normal_(self.linear.weight, std=0.01)
             name = 'linear'
-            output_shape[name] = layers.ShapeSpec(channels=num_classes)
+            output_shape[name] = ShapeSpec(channels=num_classes)
 
         if out_features is None:
             out_features = [name]
@@ -426,14 +426,15 @@ class ResNet(layers.BaseModule):
         return self
 
     @property
-    def output_shape(self) -> Dict[str, layers.ShapeSpec]:
+    def output_shape(self) -> Dict[str, ShapeSpec]:
         return self._output_shape
 
 
 @BackboneRegistry.register('ResNet_Backbone')
 def resnet_backbone(
+    input_shape: ShapeSpec,
+    *,
     depth: int = 50,
-    in_channels: int = 3,
     stem_out_channels: int = 64,
     res2_out_channels: int = 256,
     norm: Union[str, Callable] = 'FrozenBN',
@@ -447,8 +448,8 @@ def resnet_backbone(
 ) -> ResNet:
     """
     Args:
+        input_shape: Input shape of backbone, only :attr:`channels` is needed.
         depth: Depth of ResNet layers, can be 18, 34, 50, 101, or 152.
-        in_channels: Number of input channels of ResNet.
         stem_out_channels: Number of output channels of stem. For R18 and R34, this is needs to be
             set to 64.
         res2_out_channels: Number of output channels of res2.
@@ -476,7 +477,7 @@ def resnet_backbone(
 
     block_class, stage_blocks = ResNet.settings[depth]
 
-    stem = BasicStem(in_channels, stem_out_channels, norm)
+    stem = BasicStem(input_shape.channels, stem_out_channels, norm)
 
     in_channels = stem_out_channels
     out_channels = res2_out_channels

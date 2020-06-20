@@ -393,6 +393,7 @@ Wrappers of RPN
 @ProposalGeneratorRegistry.register('Standard_RCNN_RPN')
 def standard_rcnn_rpn(
     input_shape: Dict[str, ShapeSpec],
+    *,
     in_features: List[str] = ('res4',),
     # anchor generator
     sizes: Union[List[float], List[List[float]]] = ((32, 64, 128, 256, 512),),
