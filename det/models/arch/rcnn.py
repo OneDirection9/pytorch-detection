@@ -69,11 +69,17 @@ class GeneralizedRCNN(nn.Module):
             x = self.neck(x)
         return x
 
-    def forward(self, items):
-        images = [item['image'].to(self.device) for item in items]
+    def forward(self, batched_inputs):
+        images = [item['image'].to(self.device) for item in batched_inputs]
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         images = ImageList.from_tensors(images, self._size_divisibility)
         features = self.extract_features(images.tensor)
+
+        if 'instances' in batched_inputs[0]:
+            gt_instances = [x['instances'].to(self.device) for x in batched_inputs]
+        else:
+            gt_instances = None
+        self.proposal_generator(images, features, gt_instances)
 
         return features
 

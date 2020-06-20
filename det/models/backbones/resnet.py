@@ -123,7 +123,7 @@ class BottleneckBlock(layers.BaseCNNBlock):
         stride: int = 1,
         num_groups: int = 1,
         norm: Union[str, Callable] = 'BN',
-        stride_in_1x1: bool = True,
+        stride_in_1x1: bool = False,
         dilation: int = 1,
     ) -> None:
         """

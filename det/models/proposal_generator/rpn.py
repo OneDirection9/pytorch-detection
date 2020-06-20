@@ -12,13 +12,14 @@ from torch.nn import functional as F
 
 from det.layers import ShapeSpec, cat
 from det.structures import Boxes, ImageList, Instances, RotatedBoxes, pairwise_iou
+from ..anchor_generator import DefaultAnchorGenerator
 from ..box_regression import Box2BoxTransform
 from ..matcher import Matcher
 from ..sampling import subsample_labels
 from .registry import ProposalGeneratorRegistry
 from .utils import find_top_rpn_proposals
 
-__all__ = ['RPN']
+__all__ = ['StandardRPNHead', 'RPN', 'standard_rcnn_rpn']
 """
 Shape shorthand in this module:
 
@@ -132,9 +133,11 @@ class RPN(nn.Module):
             batch_size_per_image: Number of anchors per image to sample for training.
             positive_fraction: Fraction of foreground anchors to sample for training.
             pre_nms_topk: (train, test) that represents the number of top k proposals to select
-                before NMS, in training and testing.
+                before NMS, in training and testing. When FPN is used, this is *per FPN level* (not
+                total).
             post_nms_topk: (train, test) that represents the number of top k proposals to select
-                after NMS, in training and testing.
+                after NMS, in training and testing. When FPN is used, this limit is applied per
+                level and then again to the union of proposals from all levels
             nms_thresh: NMS threshold used to de-duplicate the predicted proposals.
             min_box_size: Remove proposal boxes with any side smaller than this threshold, in the
                 unit of input image pixels.
@@ -305,7 +308,7 @@ class RPN(nn.Module):
         # Transpose the Hi*Wi*A dimension to the middle:
         pred_objectness_logits = [
             # (N, A, Hi, Wi) -> (N, Hi, Wi, A) -> (N, Hi*Wi*A)
-            score.premute(0, 2, 3, 1).flatten(1) for score in pred_objectness_logits
+            score.permute(0, 2, 3, 1).flatten(1) for score in pred_objectness_logits
         ]
         pred_anchor_deltas = [
             # (N, A*B, Hi, Wi) -> (N, A, B, Hi, Wi) -> (N, Hi, Wi, A, B) -> (N, Hi*Wi*A, B)
@@ -382,6 +385,88 @@ class RPN(nn.Module):
         return proposals
 
 
-@ProposalGeneratorRegistry.register('RCNN_RPN')
-def rcnn_rpn(input_shape: Dict[str, ShapeSpec]):
-    pass
+"""
+Wrappers of RPN
+"""
+
+
+@ProposalGeneratorRegistry.register('Standard_RCNN_RPN')
+def standard_rcnn_rpn(
+    input_shape: Dict[str, ShapeSpec],
+    in_features: List[str] = ('res4',),
+    # anchor generator
+    sizes: Union[List[float], List[List[float]]] = ((32, 64, 128, 256, 512),),
+    aspect_ratios: Union[List[float], List[List[float]]] = ((0.5, 1.0, 2.0),),
+    offset: float = 0.0,
+    # Matcher
+    thresholds: List[float] = (0.3, 0.7),
+    labels: List[int] = (0, -1, 1),
+    # Box2BoxTransform
+    bbox_reg_weights: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0),
+    # RPN
+    batch_size_per_image: int = 256,
+    positive_fraction: float = 0.5,
+    pre_nms_topk: Tuple[int, int] = (12000, 6000),
+    post_nms_topk: Tuple[int, int] = (2000, 1000),
+    nms_thresh: float = 0.7,
+    min_box_size: float = 0.0,
+    loss_weight: float = 1.0,
+    smooth_l1_beta: float = 0.0,
+) -> RPN:
+    """
+    Args:
+        input_shape: Output shape of backbone or neck.
+        in_features: See :class:`RPN`.
+        sizes: See :class:`DefaultAnchorGenerator`.
+        aspect_ratios: See :class:`DefaultAnchorGenerator`.
+        offset: See :class:`DefaultAnchorGenerator`.
+        thresholds: See :class:`Matcher`.
+        labels: See :class:`Matcher`.
+        bbox_reg_weights: See :class:`Box2BoxTransform`.
+        batch_size_per_image: See :class:`RPN`.
+        positive_fraction: See :class:`RPN`.
+        pre_nms_topk: See :class:`RPN`.
+        post_nms_topk: See :class:`RPN`.
+        nms_thresh: See :class:`RPN`.
+        min_box_size: See :class:`RPN`.
+        loss_weight: See :class:`RPN`.
+        smooth_l1_beta: See :class:`RPN`.
+    """
+    input_shape = [input_shape[f] for f in in_features]
+
+    strides = [s.stride for s in input_shape]
+    anchor_generator = DefaultAnchorGenerator(sizes, aspect_ratios, strides, offset)
+
+    # Standard RPN is shared across levels:
+    in_channels = [s.channels for s in input_shape]
+    assert len(set(in_channels)) == 1, 'Each level must have the same channel!'
+    in_channels = in_channels[0]
+
+    num_anchors = anchor_generator.num_anchors
+    assert len(
+        set(num_anchors)
+    ) == 1, 'Each level must have the same number of anchors per spatial position'
+    num_anchors = num_anchors[0]
+
+    box_dim = anchor_generator.box_dim
+    head = StandardRPNHead(in_channels=in_channels, num_anchors=num_anchors, box_dim=box_dim)
+
+    anchor_matcher = Matcher(list(thresholds), list(labels), allow_low_quality_matches=True)
+
+    box2box_transform = Box2BoxTransform(bbox_reg_weights)
+
+    return RPN(
+        in_features=in_features,
+        head=head,
+        anchor_generator=anchor_generator,
+        anchor_matcher=anchor_matcher,
+        box2box_transform=box2box_transform,
+        batch_size_per_image=batch_size_per_image,
+        positive_fraction=positive_fraction,
+        pre_nms_topk=pre_nms_topk,
+        post_nms_topk=post_nms_topk,
+        nms_thresh=nms_thresh,
+        min_box_size=min_box_size,
+        loss_weight=loss_weight,
+        smooth_l1_beta=smooth_l1_beta,
+    )
