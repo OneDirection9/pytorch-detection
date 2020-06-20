@@ -131,15 +131,15 @@ def print_instances_class_histogram(
 ) -> None:
     """
     Args:
-        dataset_dicts (list[dict]): list of dataset dicts.
-        class_names (list[str]): list of class names (zero-indexed).
+        dataset_dicts: List of dataset dicts.
+        class_names: List of class names (zero-indexed).
     """
     num_classes = len(class_names)
     hist_bins = np.arange(num_classes + 1)
     histogram = np.zeros((num_classes,), dtype=np.int)
     for entry in dataset_dicts:
-        annos = entry['annotations']
-        classes = [x['category_id'] for x in annos if not x.get('iscrowd', 0)]
+        anns = entry['annotations']
+        classes = [x['category_id'] for x in anns if not x.get('iscrowd', 0)]
         histogram += np.histogram(classes, bins=hist_bins)[0]
 
     N_COLS = min(6, len(class_names) * 2)
