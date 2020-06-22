@@ -57,7 +57,7 @@ class StandardRPNHead(nn.Module):
 
     def __init__(self, *, in_channels: int, num_anchors: int, box_dim: int = 4) -> None:
         """
-       Args:
+        Args:
             in_channels: Number of input feature channels. When using multiple input features, they
                 must have the same number of channels.
             num_anchors: Number of anchors to predict for *each spatial position* on the feature
