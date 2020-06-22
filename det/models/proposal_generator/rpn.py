@@ -389,6 +389,8 @@ Wrappers of RPN
 """
 
 
+# TODO: add from_config as class method. When building objects, if the object has attribute
+#   from_config, we call obj.from_config(input_shape, **cfg), otherwise obj(input_shape, **cfg)
 @ProposalGeneratorRegistry.register('Standard_RCNN_RPN')
 def standard_rcnn_rpn(
     input_shape: Dict[str, ShapeSpec],
