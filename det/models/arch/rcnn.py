@@ -26,7 +26,6 @@ class GeneralizedRCNN(nn.Module):
 
     def __init__(
         self,
-        *,
         backbone: Backbone,
         proposal_generator: nn.Module,
         roi_heads: nn.Module,

@@ -106,7 +106,6 @@ class RPN(nn.Module):
 
     def __init__(
         self,
-        *,
         in_features: List[str],
         head: nn.Module,
         anchor_generator: nn.Module,
