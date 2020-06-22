@@ -27,7 +27,7 @@ data:
       num_workers: 0
 
 model:
-  name: FasterRCNN
+  name: Generalized_RCNN_Model
   backbone:
     name: ResNet_Backbone
     depth: 50
@@ -38,8 +38,8 @@ model:
     in_features: ['res2', 'res3', 'res4', 'res5']
   proposal_generator:
     name: Standard_RCNN_RPN
-    in_featuers: ['p2', 'p3', 'p4', 'p5', 'p6']
-  roi_head:
+    in_features: ['p2', 'p3', 'p4', 'p5', 'p6']
+  roi_heads:
     name: ROIHead
 
 cudnn_benchmark: False
