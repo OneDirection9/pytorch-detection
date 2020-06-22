@@ -274,25 +274,26 @@ def build_detection_train_loader(
     Args:
         cfg: Config should be a dictionary and looks something like:
             {'datasets': ...,
-             'processing_params': ...
-             'mapper_params': ...}
+             'processing': ...
+             'mapper': ...}
         processing_fn: A callable that takes dataset dicts as input and returns processed ones. By
-            default it will be `Processing(**cfg.get('processing_params', {}))`.
+            default it will be `Processing(**cfg.get('processing', {}))`.
         mapper: A callable that takes a sample (dict) from dataset and returns the format to be
-            consumed by the model. By default it will be `DatasetMapper(mapper_params)`.
+            consumed by the model. By default it will be `DatasetMapper(*args, **kwargs)`.
     """
     vision_datasets = build_vision_datasets(cfg['datasets'])
     if processing_fn is None:
-        # Instantiate Processing using processing_params from config by default
-        processing_fn = Processing(**cfg.get('processing_params', {}))
+        # Instantiate Processing using arguments from config
+        processing_fn = Processing(**cfg.get('processing', {}))
     # Loads and processes dataset dicts.
     dataset_dicts = get_detection_dataset_dicts(vision_datasets, processing_fn)
 
     dataset = DatasetFromList(dataset_dicts, False)
     if mapper is None:
         # Instantiate mapper
-        mapper_params = cfg.get('mapper_params', {})
-        mapper = DatasetMapper(**mapper_params, training=True, vision_datasets=vision_datasets)
+        mapper = DatasetMapper(
+            **cfg.get('mapper', {}), training=True, vision_datasets=vision_datasets
+        )
     dataset = MapDataset(dataset, mapper)
 
     sampler_name = cfg['dataloader']['sampler']
@@ -323,8 +324,7 @@ def build_detection_test_loader(
     dataset = DatasetFromList(dataset_dicts, False)
     if mapper is None:
         # Instantiate mapper
-        mapper_params = cfg.get('mapper_params', {})
-        mapper = DatasetMapper(**mapper_params, training=False)
+        mapper = DatasetMapper(**cfg.get('mapper', {}), training=False)
     dataset = MapDataset(dataset, mapper)
 
     sampler = InferenceSampler(dataset)

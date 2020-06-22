@@ -7,7 +7,7 @@ data:
       - name: COCOPerson
         json_file: ./data/MSCOCO/annotations/person_keypoints_train2017.json
         image_root: ./data/MSCOCO/train2017/
-    mapper_params:
+    mapper:
       mask_on: True
       keypoint_on: True
     dataloader:
@@ -20,7 +20,7 @@ data:
       - name: COCOPerson
         json_file: ./data/MSCOCO/annotations/person_keypoints_val2017.json
         image_root: ./data/MSCOCO/val2017/
-    mapper_params:
+    mapper:
       mask_on: True
       keypoint_on: True
     dataloader:
@@ -37,9 +37,8 @@ model:
     name: RCNN_FPN_Neck
     in_features: ['res2', 'res3', 'res4', 'res5']
   proposal_generator:
-    name: RPN
-    anchor_generator:
-      name: StandardAnchorGenerator
+    name: Standard_RCNN_RPN
+    in_featuers: ['p2', 'p3', 'p4', 'p5', 'p6']
   roi_head:
     name: ROIHead
 
