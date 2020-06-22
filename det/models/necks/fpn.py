@@ -127,7 +127,6 @@ class FPN(Neck):
 
     def __init__(
         self,
-        *,
         in_channels: List[int],
         in_strides: List[int],
         in_features: List[str],
@@ -285,15 +284,7 @@ def rcnn_fpn_neck(
     in_strides = [input_shape[f].stride for f in in_features]
     top_block = LastLevelMaxPool(out_channels)
 
-    return FPN(
-        in_channels=in_channels,
-        in_strides=in_strides,
-        in_features=in_features,
-        out_channels=out_channels,
-        norm=norm,
-        fuse_type=fuse_type,
-        top_block=top_block,
-    )
+    return FPN(in_channels, in_strides, in_features, out_channels, norm, fuse_type, top_block)
 
 
 @NeckRegistry.register('RetinaNet_FPN_Neck')
@@ -318,12 +309,4 @@ def retinanet_fpn_neck(
     in_strides = [input_shape[f].stride for f in in_features]
     top_block = LastLevelP6P7(input_shape['res5'].channels, out_channels)
 
-    return FPN(
-        in_channels=in_channels,
-        in_strides=in_strides,
-        in_features=in_features,
-        out_channels=out_channels,
-        norm=norm,
-        fuse_type=fuse_type,
-        top_block=top_block,
-    )
+    return FPN(in_channels, in_strides, in_features, out_channels, norm, fuse_type, top_block)
