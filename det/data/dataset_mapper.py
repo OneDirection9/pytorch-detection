@@ -121,7 +121,7 @@ class DatasetMapper(object):
         image = utils.read_image(dataset_dict['file_name'], self.image_format)
         utils.check_image_size(dataset_dict, image)
 
-        if 'annotations' not in dataset_dict:
+        if not dataset_dict.get('annotations', []):
             image, transforms = T.apply_transforms(
                 ([self.crop_gen] if self.crop_gen else []) + self.tfm_gens, image
             )
