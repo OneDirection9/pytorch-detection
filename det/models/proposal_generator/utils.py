@@ -4,6 +4,7 @@
 from __future__ import absolute_import, division, print_function
 
 import itertools
+import math
 from typing import List, Tuple
 
 import torch
@@ -11,7 +12,7 @@ import torch
 from det.layers import batched_nms, cat
 from det.structures import Boxes, Instances
 
-__all__ = ['find_top_rpn_proposals']
+__all__ = ['find_top_rpn_proposals', 'add_ground_truth_to_proposals']
 
 
 def find_top_rpn_proposals(
@@ -117,3 +118,55 @@ def find_top_rpn_proposals(
         res.objectness_logits = scores_per_img[keep]
         results.append(res)
     return results
+
+
+def add_ground_truth_to_proposals(
+    gt_boxes: List[Boxes], proposals: List[Instances]
+) -> List[Instances]:  # yapf: disable
+    """Calls `add_ground_truth_to_proposals_single_image` for all images.
+
+    Args:
+        gt_boxes: List of N elements. Element i is a Boxes representing the ground-truth for image
+            i.
+        proposals: List of N elements. Element i is a Instances representing the proposals for image
+            i.
+
+    Returns:
+        List[Instances]: List of N Instances. Each is the proposals for the image, with field
+            `proposal_boxes` and `objectness_logits`.
+    """
+    assert gt_boxes is not None
+
+    assert len(proposals) == len(gt_boxes)
+    if len(proposals) == 0:
+        return proposals
+
+    return [
+        add_ground_truth_to_proposals_single_image(gt_boxes_i, proposals_i)
+        for gt_boxes_i, proposals_i in zip(gt_boxes, proposals)
+    ]
+
+
+def add_ground_truth_to_proposals_single_image(gt_boxes: Boxes, proposals: Instances):
+    """Augments `proposals` with ground-truth boxes from `gt_boxes`.
+
+    Args:
+        gt_boxes: See :func:`add_ground_truth_to_proposals`, but with gt_boxes per image.
+        proposals: See :func:`add_ground_truth_to_proposals`, but with proposals per image.
+
+    Returns:
+        Same as :func:`add_ground_truth_to_proposals`, but for only one image.
+    """
+    device = proposals.objectness_logits.device
+    # Assign all ground-truth boxes an objectness logit corresponding to
+    # P(object) = sigmoid(logits) =~ 1.
+    gt_logit_value = math.log((1.0 - 1e-10) / (1 - (1.0 - 1e-10)))
+    gt_logits = gt_logit_value * torch.ones(len(gt_boxes), device=device)
+
+    # Concatenating gt_boxes with proposals requires them to have the same field
+    gt_proposal = Instances(proposals.image_size)
+    gt_proposal.proposal_boxes = gt_boxes
+    gt_proposal.objectness_logits = gt_logits
+    new_proposals = Instances.cat([proposals, gt_proposal])
+
+    return new_proposals

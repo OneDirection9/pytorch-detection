@@ -107,6 +107,7 @@ class RPN(nn.Module):
 
     def __init__(
         self,
+        *,
         in_features: List[str],
         head: nn.Module,
         anchor_generator: nn.Module,
@@ -189,7 +190,7 @@ class RPN(nn.Module):
 
         Returns:
             gt_labels: List of #image tensors. i-th element is a vector of labels whose length is
-                the total number of anchors across all feature maps R = sum(Hi * Wi * Ai). Label
+                the total number of anchors across all feature maps R = sum(Hi * Wi * A). Label
                 values are in {-1, 0, 1}, with meanings: -1 = ignore, 0: negative class; 1: positive
                 class.
             matched_gt_boxes: List of #image tensors. i-th element is a Rx4 tensor. The values are

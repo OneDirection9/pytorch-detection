@@ -127,6 +127,7 @@ class FPN(Neck):
 
     def __init__(
         self,
+        *,
         in_channels: List[int],
         in_strides: List[int],
         in_features: List[str],
