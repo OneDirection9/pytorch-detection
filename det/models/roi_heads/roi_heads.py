@@ -191,7 +191,7 @@ class ROIHeads(nn.Module):
                 - gt_boxes: the bounding box of each instance.
                 - gt_classes: the label for each instance with a category ranging in [0, #class].
                 - gt_masks: PolygonMasks or BitMasks, the ground-truth masks of each instance.
-                - gt_keypoints: NxKx3, the groud-truth keypoints for each instance.
+                - gt_keypoints: NxKx3, the ground-truth keypoints for each instance.
 
         Returns:
             List[Instances]: Length `N` list of `Instances` containing the detected instances.
