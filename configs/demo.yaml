@@ -1,47 +1,5 @@
-data:
-  train:
-    datasets:
-#      - name: COCOInstance
-#        json_file: ./data/MSCOCO/annotations/instances_train2017.json
-#        image_root: ./data/MSCOCO/train2017/
-      - name: COCOPerson
-        json_file: ./data/MSCOCO/annotations/person_keypoints_train2017.json
-        image_root: ./data/MSCOCO/train2017/
-    mapper:
-      mask_on: True
-      keypoint_on: True
-    dataloader:
-      sampler: TrainingSampler
-      aspect_ratio_grouping: True
-      images_per_batch: 2
-      num_workers: 0
-  test:
-    datasets:
-      - name: COCOPerson
-        json_file: ./data/MSCOCO/annotations/person_keypoints_val2017.json
-        image_root: ./data/MSCOCO/val2017/
-    mapper:
-      mask_on: True
-      keypoint_on: True
-    dataloader:
-      num_workers: 0
-
-model:
-  name: Generalized_RCNN_Model
-  backbone:
-    name: ResNet_Backbone
-    depth: 50
-    norm: BN
-    out_features: ['res2', 'res3', 'res4', 'res5']
-  neck:
-    name: RCNN_FPN_Neck
-    in_features: ['res2', 'res3', 'res4', 'res5']
-  proposal_generator:
-    name: Standard_RCNN_RPN
-    in_features: ['p2', 'p3', 'p4', 'p5', 'p6']
-  roi_heads:
-    name: ROIHead
-
-cudnn_benchmark: False
-output_dir: ./experiments/demo
-seed: 1234
+DATASETS:
+  TRAIN:
+    - name: COCOPerson
+      json_file: ./data/MSCOCO/annotations/person_keypoints_train2017.json
+      image_root: ./data/MSCOCO/train2017/

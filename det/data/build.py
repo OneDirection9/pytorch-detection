@@ -6,7 +6,7 @@ from __future__ import absolute_import, division, print_function
 import itertools
 import logging
 import operator
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 
 import numpy as np
 import torch
@@ -14,13 +14,14 @@ from tabulate import tabulate
 from termcolor import colored
 from torch.utils.data import BatchSampler, DataLoader, Dataset, Sampler
 
+from det.config import CfgNode
 from det.utils.comm import get_world_size
 from det.utils.env import seed_all_rng
 from . import utils
 from .common import AspectRatioGroupedDataset, DatasetFromList, MapDataset
 from .dataset_mapper import DatasetMapper
 from .datasets import VisionDataset, build_vision_datasets
-from .samplers import InferenceSampler, TrainingSampler
+from .samplers import InferenceSampler, RepeatFactorTrainingSampler, TrainingSampler
 
 logger = logging.getLogger(__name__)
 
@@ -33,97 +34,68 @@ __all__ = [
 ]
 
 
-class Processing(object):
-    """Filtering out images with only crowd annotations and too few number of keypoints."""
+def filter_images_with_only_crowd_annotations(
+    dataset_dicts: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Filters out images with none annotations or only crowd annotations.
 
-    def __init__(self, filter_empty: bool = True, min_keypoints: int = 1) -> None:
-        """
-        Args:
-            filter_empty: Whether to filter out images without instance annotations.
-            min_keypoints: Filter out images with few keypoints than `min_keypoints`. Set to 0 to do
-                nothing.
-        """
-        self.filter_empty = filter_empty
-        self.min_keypoints = min_keypoints
+    Filter out images without non-crowd annotations. A common training-time pre-processing on
+    COCO dataset.
 
-    @staticmethod
-    def filter_images_with_only_crowd_annotations(
-        dataset_dicts: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
-        """Filters out images with none annotations or only crowd annotations.
+    Args:
+        dataset_dicts: Annotations in Detectron2's Dataset format.
 
-        Filter out images without non-crowd annotations. A common training-time pre-processing on
-        COCO dataset.
+    Returns:
+        The same format, but filtered.
+    """
+    num_before = len(dataset_dicts)
 
-        Args:
-            dataset_dicts: Annotations in Detectron2's Dataset format.
+    def is_valid(anns: List[Dict[str, Any]]) -> bool:
+        for ann in anns:
+            if ann.get('iscrowd', 0) == 0:
+                return True
+        return False
 
-        Returns:
-            The same format, but filtered.
-        """
-        num_before = len(dataset_dicts)
-
-        def is_valid(anns: List[Dict[str, Any]]) -> bool:
-            for ann in anns:
-                if ann.get('iscrowd', 0) == 0:
-                    return True
-            return False
-
-        dataset_dicts = [x for x in dataset_dicts if is_valid(x['annotations'])]
-        num_after = len(dataset_dicts)
-        logger.info(
-            'Removed {} images with no usable annotations. {} images left.'.format(
-                num_before - num_after, num_after
-            )
+    dataset_dicts = [x for x in dataset_dicts if is_valid(x['annotations'])]
+    num_after = len(dataset_dicts)
+    logger.info(
+        'Removed {} images with no usable annotations. {} images left.'.format(
+            num_before - num_after, num_after
         )
-        return dataset_dicts
+    )
+    return dataset_dicts
 
-    @staticmethod
-    def filter_images_with_few_keypoints(
-        dataset_dicts: List[Dict[str, Any]], min_keypoints: int = 0
-    ) -> List[Dict[str, Any]]:
-        """Filters out images with too few number of keypoints.
 
-        Args:
-            dataset_dicts: Annotations in Detectron2's Dataset format.
-            min_keypoints: See :class:`Processing`.
+def filter_images_with_few_keypoints(
+    dataset_dicts: List[Dict[str, Any]], min_keypoints: int = 0
+) -> List[Dict[str, Any]]:  # yapf: disable
+    """Filters out images with too few number of keypoints.
 
-        Returns:
-            The same format, but filtered.
-        """
-        num_before = len(dataset_dicts)
+    Args:
+        dataset_dicts: Annotations in Detectron2's Dataset format.
+        min_keypoints: Filter out images with few keypoints than `min_keypoints`. Set to 0 to do
+            nothing.
 
-        def visible_keypoints_in_image(anns: List[Dict[str, Any]]) -> int:
-            return sum(
-                (np.array(ann['keypoints'][2::3]) > 0).sum() for ann in anns if 'keypoints' in ann
-            )
+    Returns:
+        The same format, but filtered.
+    """
+    num_before = len(dataset_dicts)
 
-        dataset_dicts = [
-            x for x in dataset_dicts if visible_keypoints_in_image(x['annotations']) > min_keypoints
-        ]
-        num_after = len(dataset_dicts)
-        logger.info(
-            'Removed {} images with fewer than {} keypoints. {} images left.'.format(
-                num_before - num_after, min_keypoints, num_after
-            )
+    def visible_keypoints_in_image(anns: List[Dict[str, Any]]) -> int:
+        return sum(
+            (np.array(ann['keypoints'][2::3]) > 0).sum() for ann in anns if 'keypoints' in ann
         )
-        return dataset_dicts
 
-    def __call__(self, dataset_dicts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        has_instances = 'annotations' in dataset_dicts[0]
-
-        if self.filter_empty and has_instances and 'sem_seg_file_name' not in dataset_dicts:
-            dataset_dicts = self.filter_images_with_only_crowd_annotations(dataset_dicts)
-
-        if self.min_keypoints > 0 and has_instances:
-            dataset_dicts = self.filter_images_with_few_keypoints(dataset_dicts, self.min_keypoints)
-
-        return dataset_dicts
-
-    def __repr__(self) -> str:
-        return self.__class__.__name__ + '(filter_empty={0}, min_keypoints={1})'.format(
-            self.filter_empty, self.min_keypoints
+    dataset_dicts = [
+        x for x in dataset_dicts if visible_keypoints_in_image(x['annotations']) > min_keypoints
+    ]
+    num_after = len(dataset_dicts)
+    logger.info(
+        'Removed {} images with fewer than {} keypoints. {} images left.'.format(
+            num_before - num_after, min_keypoints, num_after
         )
+    )
+    return dataset_dicts
 
 
 def print_instances_class_histogram(
@@ -172,14 +144,15 @@ def print_instances_class_histogram(
 
 
 def get_detection_dataset_dicts(
-    datasets: List[VisionDataset],
-    processing_fn: Optional[Callable] = None,
-) -> List[Dict[str, Any]]:
+    datasets: List[VisionDataset], filter_empty: bool = True, min_keypoints: int = 0
+) -> List[Dict[str, Any]]:  # yapf: disable
     """Loads and processes data for instance detection/segmentation and semantic segmentation.
 
     Args:
         datasets: List of vision datasets.
-        processing_fn: A callable that takes dataset dicts as input and returns processed ones.
+        filter_empty: Whether to filter out images without instance annotations.
+        min_keypoints: Filter out images with few keypoints than `min_keypoints`. Set to 0 to do
+            nothing.
 
     Returns:
         List of dataset dicts.
@@ -190,18 +163,22 @@ def get_detection_dataset_dicts(
 
     dataset_dicts = list(itertools.chain.from_iterable(dataset_dicts))
 
-    if processing_fn is not None:
-        logger.info("Using '{}' to process dataset dicts".format(processing_fn))
-        dataset_dicts = processing_fn(dataset_dicts)
+    has_instances = 'annotations' in dataset_dicts[0]
+    # Keep images without instance-level GT if the dataset has semantic labels.
+    if filter_empty and has_instances and 'sem_seg_file_name' not in dataset_dicts[0]:
+        dataset_dicts = filter_images_with_only_crowd_annotations(dataset_dicts)
+
+    if min_keypoints > 0 and has_instances:
+        dataset_dicts = filter_images_with_few_keypoints(dataset_dicts, min_keypoints)
 
     has_instances = 'annotations' in dataset_dicts[0]
     if has_instances:
         try:
+            class_names = datasets[0].metadata.thing_classes
             utils.check_metadata_consistency('thing_classes', datasets)
-            print_instances_class_histogram(dataset_dicts, datasets[0].metadata.thing_classes)
+            print_instances_class_histogram(dataset_dicts, class_names)
         except AttributeError:  # class names are not available for this dataset
             pass
-
     return dataset_dicts
 
 
@@ -257,9 +234,7 @@ def build_batch_data_loader(
     return dataloader
 
 
-def build_detection_train_loader(
-    cfg: Dict[str, Any], processing_fn: Callable = None, mapper: Callable = None
-) -> DataLoader:
+def build_detection_train_loader(cfg: CfgNode, mapper: Callable = None) -> DataLoader:
     """Builds a training dataloader from config.
 
     A data loader is created by the following steps:
@@ -272,69 +247,64 @@ def build_detection_train_loader(
     The batched ``list[mapped_dict]`` is what this dataloader will yield.
 
     Args:
-        cfg: Config should be a dictionary and looks something like:
-            {'datasets': ...,
-             'processing': ...
-             'mapper': ...}
-        processing_fn: A callable that takes dataset dicts as input and returns processed ones. By
-            default it will be `Processing(**cfg.get('processing', {}))`.
+        cfg: The config.
         mapper: A callable that takes a sample (dict) from dataset and returns the format to be
-            consumed by the model. By default it will be `DatasetMapper(*args, **kwargs)`.
+            consumed by the model. By default it will be `DatasetMapper(cfg, True)`.
     """
-    vision_datasets = build_vision_datasets(cfg['datasets'])
-    if processing_fn is None:
-        # Instantiate Processing using arguments from config
-        processing_fn = Processing(**cfg.get('processing', {}))
-    # Loads and processes dataset dicts.
-    dataset_dicts = get_detection_dataset_dicts(vision_datasets, processing_fn)
+    dataset_dicts = get_detection_dataset_dicts(
+        build_vision_datasets(cfg.DATASETS.TRAIN),
+        filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
+        min_keypoints=cfg.MODEL.ROI_KEYPOINT_HEAD.MIN_KEYPOINTS_PER_IMAGE
+        if cfg.MODEL.KEYPOINT_ON else 0
+    )
 
-    dataset = DatasetFromList(dataset_dicts, False)
+    dataset = DatasetFromList(dataset_dicts, copy=False)
     if mapper is None:
-        # Instantiate mapper
-        mapper = DatasetMapper(
-            **cfg.get('mapper', {}), training=True, vision_datasets=vision_datasets
-        )
+        mapper = DatasetMapper(cfg, True)
     dataset = MapDataset(dataset, mapper)
 
-    sampler_name = cfg['dataloader']['sampler']
+    sampler_name = cfg.DATALOADER.SAMPLER_TRAIN
+    logger.info('Using training sampler {}'.format(sampler_name))
+    # TODO avoid if-else?
     if sampler_name == 'TrainingSampler':
-        sampler = TrainingSampler(dataset)
+        sampler = TrainingSampler(len(dataset))
+    elif sampler_name == 'RepeatFactorTrainingSampler':
+        repeat_factors = RepeatFactorTrainingSampler.repeat_factors_from_category_frequency(
+            dataset_dicts, cfg.DATALOADER.REPEAT_THRESHOLD
+        )
+        sampler = RepeatFactorTrainingSampler(repeat_factors)
     else:
         raise ValueError('Unknown training sampler: {}'.format(sampler_name))
-
     return build_batch_data_loader(
         dataset,
         sampler,
-        cfg['dataloader']['images_per_batch'],
-        aspect_ratio_grouping=cfg['dataloader']['aspect_ratio_grouping'],
-        num_workers=cfg['dataloader']['num_workers'],
+        cfg.SOLVER.IMS_PER_BATCH,
+        aspect_ratio_grouping=cfg.DATALOADER.ASPECT_RATIO_GROUPING,
+        num_workers=cfg.DATALOADER.NUM_WORKERS,
     )
 
 
-def build_detection_test_loader(
-    cfg: Dict[str, Any], processing_fn: Callable = None, mapper: Callable = None
-) -> DataLoader:
+def build_detection_test_loader(cfg: CfgNode, mapper: Callable = None) -> DataLoader:
     """Similar to :func:`build_detection_train_loader`."""
-    vision_datasets = build_vision_datasets(cfg['datasets'])
-    if processing_fn is None:
-        processing_fn = Processing(filter_empty=False, min_keypoints=0)
-    # Loads and processes dataset dicts.
-    dataset_dicts = get_detection_dataset_dicts(vision_datasets, processing_fn)
+    dataset_dicts = get_detection_dataset_dicts(
+        build_vision_datasets(cfg.DATASETS.TEST),
+        filter_empty=False,
+        min_keypoints=0,
+    )
 
     dataset = DatasetFromList(dataset_dicts, False)
     if mapper is None:
-        # Instantiate mapper
-        mapper = DatasetMapper(**cfg.get('mapper', {}), training=False)
+        mapper = DatasetMapper(cfg, False)
     dataset = MapDataset(dataset, mapper)
 
-    sampler = InferenceSampler(dataset)
+    sampler = InferenceSampler(len(dataset))
     # Always use 1 image per worker during inference since this is the
     # standard when reporting inference time in papers.
     batch_sampler = torch.utils.data.sampler.BatchSampler(sampler, 1, drop_last=False)
 
     data_loader = torch.utils.data.DataLoader(
         dataset,
-        num_workers=cfg['dataloader']['num_workers'],
+        num_workers=cfg.DATALOADER.NUM_WORKERS,
         batch_sampler=batch_sampler,
         collate_fn=trivial_batch_collator,
     )

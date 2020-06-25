@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 
+from det.config import CfgNode
 from . import transforms as T, utils
 from .datasets import VisionDataset
 
@@ -23,7 +24,7 @@ def build_transform_gen(
     max_size: int = 1333,
     sample_style: str = 'choice',
     training: bool = True
-) -> List[T.TransformGen]:
+) -> List[T.Augmentation]:
     """Creates a list of :class:`TransformGen` from config.
 
     Now it includes resizing and flipping.
@@ -61,6 +62,7 @@ class DatasetMapper(object):
 
     def __init__(
         self,
+        augmentation,
         min_size: Union[List[int], int] = (800,),
         max_size: int = 1333,
         sample_style: str = 'choice',
@@ -109,6 +111,32 @@ class DatasetMapper(object):
 
         self.training = training
 
+    @classmethod
+    def from_config(cls, cfg: CfgNode, training: bool):
+        """
+        if cfg.INPUT.CROP.ENABLED and is_train:
+            self.crop = T.RandomCrop(cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE)
+            logging.getLogger(__name__).info("CropGen used in training: " + str(self.crop))
+        else:
+            self.crop = None
+
+        self.augmentation = utils.build_augmentation(cfg, is_train)
+
+        # fmt: off
+        self.img_format     = cfg.INPUT.FORMAT
+        self.mask_on        = cfg.MODEL.MASK_ON
+        self.mask_format    = cfg.INPUT.MASK_FORMAT
+        self.keypoint_on    = cfg.MODEL.KEYPOINT_ON
+        self.load_proposals = cfg.MODEL.LOAD_PROPOSALS
+        # fmt: on
+        if self.keypoint_on and is_train:
+            # Flip only makes sense in training
+            self.keypoint_hflip_indices = utils.create_keypoint_hflip_indices(cfg.DATASETS.TRAIN)
+        else:
+            self.keypoint_hflip_indices = None
+        """
+        pass
+
     def __call__(self, dataset_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
         Args:
@@ -122,7 +150,7 @@ class DatasetMapper(object):
         utils.check_image_size(dataset_dict, image)
 
         if not dataset_dict.get('annotations', []):
-            image, transforms = T.apply_transforms(
+            image, transforms = T.apply_augmentations(
                 ([self.crop_gen] if self.crop_gen else []) + self.tfm_gens, image
             )
         else:
@@ -133,7 +161,7 @@ class DatasetMapper(object):
                     np.random.choice(dataset_dict['annotations'])
                 )
                 image = crop_tfm.apply_image(image)
-            image, transforms = T.apply_transforms(self.tfm_gens, image)
+            image, transforms = T.apply_augmentations(self.tfm_gens, image)
             if self.crop_gen:
                 transforms = crop_tfm + transforms
 

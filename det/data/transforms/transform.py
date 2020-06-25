@@ -126,8 +126,9 @@ class RotationTransform(Transform):
         abs_cos, abs_sin = abs(np.cos(np.deg2rad(angle))), abs(np.sin(np.deg2rad(angle)))
         if expand:
             # find the new width and height bounds
-            bound_w, bound_h = np.rint([h * abs_sin + w * abs_cos,
-                                        h * abs_cos + w * abs_sin]).astype(int)
+            bound_w, bound_h = np.rint(
+                [h * abs_sin + w * abs_cos, h * abs_cos + w * abs_sin]
+            ).astype(int)  # yapf: disable
         else:
             bound_w, bound_h = w, h
 

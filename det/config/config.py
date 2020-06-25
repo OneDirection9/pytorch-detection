@@ -5,7 +5,7 @@ from __future__ import absolute_import, division, print_function
 
 from foundation.common.config import CfgNode
 
-__all__ = ['get_cfg']
+__all__ = ['CfgNode', 'get_cfg']
 
 
 def get_cfg() -> CfgNode:

@@ -3,9 +3,7 @@
 # Modified by: Zhipeng Han
 from __future__ import absolute_import, division, print_function
 
-import inspect
 import sys
-from abc import ABCMeta, abstractmethod
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -19,10 +17,10 @@ from foundation.transforms import (
     VFlipTransform,
 )
 
+from .augmentation import Augmentation
 from .transform import ExtentTransform, RotationTransform
 
 __all__ = [
-    'TransformGen',
     'RandomApply',
     'RandomHFlip',
     'RandomVFlip',
@@ -38,89 +36,21 @@ __all__ = [
 ]
 
 
-class TransformGen(object, metaclass=ABCMeta):
-    """A wrapper that creates a :class:`Transform` based on the given image.
-
-    It creates a :class:`Transform` based on the given image, sometimes with randomness.
-    The transform can then be used to transform images or other data
-    (boxes, points, annotations, etc.) associated with it.
-
-    The assumption made in this class
-    is that the image itself is sufficient to instantiate a transform.
-    When this assumption is not true, you need to create the transforms by your own.
-
-    A list of `TransformGen` can be applied with :func:`apply_transforms`.
-    """
-
-    def __init__(self) -> None:
-        """Rewrites it to avoid raise AssertionError in :meth:`__repr__` due to *args, **kwargs."""
-        pass
-
-    @abstractmethod
-    def get_transform(self, image: np.ndarray) -> Transform:
-        """Gets a :class:`Transform` based on the given image.
-
-        Args:
-            image: Array of shape HxWxC or HxW.
-        """
-        pass
-
-    @staticmethod
-    def _rand_range(
-        low=1.0,
-        high: Optional[float] = None,
-        size: Optional[int] = None,
-    ) -> Union[np.ndarray, float]:
-        """Uniforms float random number between low and high.
-
-        See :func:`np.random.uniform`.
-        """
-        if high is None:
-            low, high = 0, low
-        if size is None:
-            size = []
-        return np.random.uniform(low, high, size)
-
-    def __repr__(self) -> str:
-        """Produces something like:
-        MyPipeline(field1={self.field1}, field2={self.field2})
-        """
-        try:
-            sig = inspect.signature(self.__init__)
-            items = []
-            for name, param in sig.parameters.items():
-                assert (
-                    param.kind != param.VAR_POSITIONAL and param.kind != param.VAR_KEYWORD
-                ), "The default __repr__ doesn't support *args or **kwargs"
-
-                assert hasattr(self, name), (
-                    'Attribute {} not found! '
-                    'Default __repr__ only works if attributes match the constructor.'.format(name)
-                )
-                attr = getattr(self, name)
-                items.append('{}={!r}'.format(name, attr))
-            return '{}({})'.format(self.__class__.__name__, ', '.join(items))
-        except AssertionError:
-            return super().__repr__()
-
-    __str__ = __repr__
-
-
-class RandomApply(TransformGen):
+class RandomApply(Augmentation):
     """Applying the wrapper transformation with a given probability randomly."""
 
-    def __init__(self, transform: Union[Transform, TransformGen], prob: float = 0.5) -> None:
+    def __init__(self, transform: Union[Augmentation, Transform], prob: float = 0.5) -> None:
         """
         Args:
             transform: The transform to be wrapped by the :class:`RandomApply`. The `transform` can
-                either be a :class:`Transform` or :class:`TransformGen` instance.
+                either be a :class:`Augmentation` or :class:`Transform` instance.
             prob: The probability between 0.0 and 1.0 that the wrapper transformation is applied.
         """
         super(RandomApply, self).__init__()
 
-        if not isinstance(transform, (Transform, TransformGen)):
+        if not isinstance(transform, (Augmentation, Transform)):
             raise TypeError(
-                'transform should be Transform or TransformGen. Got {}'.format(type(transform))
+                'transform should be Augmentation or Transform. Got {}'.format(type(transform))
             )
 
         if not 0.0 <= prob <= 1.0:
@@ -132,7 +62,7 @@ class RandomApply(TransformGen):
     def get_transform(self, image: np.ndarray) -> Transform:
         do = self._rand_range() < self.prob
         if do:
-            if isinstance(self.transform, TransformGen):
+            if isinstance(self.transform, Augmentation):
                 return self.transform.get_transform(image)
             else:
                 return self.transform
@@ -140,7 +70,7 @@ class RandomApply(TransformGen):
             return NoOpTransform()
 
 
-class RandomHFlip(TransformGen):
+class RandomHFlip(Augmentation):
     """Flipping the image horizontally with the given probability."""
 
     def __init__(self, prob: float = 0.5) -> None:
@@ -164,7 +94,7 @@ class RandomHFlip(TransformGen):
             return NoOpTransform()
 
 
-class RandomVFlip(TransformGen):
+class RandomVFlip(Augmentation):
     """Flipping the image vertically with the given probability."""
 
     def __init__(self, prob: float = 0.5) -> None:
@@ -188,7 +118,7 @@ class RandomVFlip(TransformGen):
             return NoOpTransform()
 
 
-class Resize(TransformGen):
+class Resize(Augmentation):
     """Resizing image to a target size."""
 
     def __init__(self, shape: Union[Tuple[int, int], int], interp: str = 'bilinear') -> None:
@@ -210,7 +140,7 @@ class Resize(TransformGen):
         )
 
 
-class ResizeShortestEdge(TransformGen):
+class ResizeShortestEdge(Augmentation):
     """Scaling the shorter edge to the given size, with a limit of `max_size` on the longer edge.
 
     If `max_size` is reached, then downscale so that the longer edge does not exceed `max_size`.
@@ -267,13 +197,14 @@ class ResizeShortestEdge(TransformGen):
         return ResizeTransform(h, w, new_h, new_w, interp=self.interp)
 
 
-class RandomCrop(TransformGen):
+class RandomCrop(Augmentation):
     """Cropping a sub-image out of an image randomly."""
 
     def __init__(self, crop_type: str, crop_size: Tuple[float, float]) -> None:
         """
         Args:
-            crop_type: One of 'relative_range', 'relative', 'absolute'. Cropping size calculation:
+            crop_type: One of "relative_range", "relative", "absolute", "absolute_range". Cropping
+                size calculation:
                 - relative: (h * crop_size[0], w * crop_size[1]) part of an input of size (h, w).
                 - relative_range: Uniformly sample relative crop size from between
                     [corp_size[0], crop_size[1]] and [1, 1] and use it as in 'relative' scenario.
@@ -282,15 +213,10 @@ class RandomCrop(TransformGen):
         """
         super(RandomCrop, self).__init__()
 
-        if crop_type not in ['relative', 'relative_range', 'absolute']:
+        if crop_type not in ['relative', 'relative_range', 'absolute', 'absolute_range']:
             raise ValueError(
-                'crop_type should be relative, relative_range or absolute. Got {}'
+                'crop_type should be relative, relative_range, absolute, or absolute_range. Got {}'
                 .format(crop_type)
-            )
-
-        if crop_type != 'absolute' and not all(0.0 <= x <= 1.0 for x in crop_size):
-            raise ValueError(
-                'crop_size should be between 0.0 and 1.0 when crop_type is in relative mode'
             )
 
         self.crop_type = crop_type
@@ -325,11 +251,16 @@ class RandomCrop(TransformGen):
             return int(h * ch + 0.5), int(w * cw + 0.5)
         elif self.crop_type == 'absolute':
             return min(self.crop_size[0], h), min(self.crop_size[1], w)
+        elif self.crop_type == 'absolute_range':
+            assert self.crop_size[0] <= self.crop_size[1]
+            ch = np.random.randint(min(h, self.crop_size[0]), min(h, self.crop_size[1]) + 1)
+            cw = np.random.randint(min(w, self.crop_size[0]), min(w, self.crop_size[1]) + 1)
+            return ch, cw
         else:
             raise NotImplementedError('Unknown crop type {}'.format(self.crop_type))
 
 
-class RandomContrast(TransformGen):
+class RandomContrast(Augmentation):
     """Transforming image contrast randomly.
 
     Contrast intensity is uniformly sampled in (intensity_min, intensity_max).
@@ -356,7 +287,7 @@ class RandomContrast(TransformGen):
         return BlendTransform(src_image=image.mean(), src_weight=1 - w, dst_weight=w)
 
 
-class RandomBrightness(TransformGen):
+class RandomBrightness(Augmentation):
     """Transforming image brightness randomly.
 
     Brightness intensity is uniformly sampled in (intensity_min, intensity_max).
@@ -383,7 +314,7 @@ class RandomBrightness(TransformGen):
         return BlendTransform(src_image=0, src_weight=1 - w, dst_weight=w)
 
 
-class RandomSaturation(TransformGen):
+class RandomSaturation(Augmentation):
     """Transforming image saturation randomly.
 
     Saturation intensity is uniformly sampled in (intensity_min, intensity_max).
@@ -413,7 +344,7 @@ class RandomSaturation(TransformGen):
         return BlendTransform(src_image=grayscale, src_weight=1 - w, dst_weight=w)
 
 
-class RandomLighting(TransformGen):
+class RandomLighting(Augmentation):
     """Transforming image color using fixed PCA over ImageNet randomly.
 
     The degree of color jittering is randomly sampled via a normal distribution,
@@ -444,7 +375,7 @@ class RandomLighting(TransformGen):
         )
 
 
-class RandomRotation(TransformGen):
+class RandomRotation(Augmentation):
     """Rotating the image a few random degrees counter clockwise around the given center."""
 
     def __init__(
@@ -505,10 +436,13 @@ class RandomRotation(TransformGen):
         if center is not None:
             center = (w * center[0], h * center[1])  # Convert to absolute coordinates
 
+        if angle % 360 == 0:
+            return NoOpTransform()
+
         return RotationTransform(h, w, angle, expand=self.expand, center=center, interp=self.interp)
 
 
-class RandomExtent(TransformGen):
+class RandomExtent(Augmentation):
     """Cropping a random 'subrect' of the source image.
 
     The subrect can be parameterized to include pixels outside the source image, in which case they
