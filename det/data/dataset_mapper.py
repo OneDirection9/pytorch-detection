@@ -5,44 +5,48 @@ from __future__ import absolute_import, division, print_function
 
 import copy
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
 
 from det.config import CfgNode
 from . import transforms as T, utils
-from .datasets import VisionDataset
+from .datasets import build_vision_datasets
 
 logger = logging.getLogger(__name__)
 
 __all__ = ['DatasetMapper']
 
 
-def build_transform_gen(
-    min_size: Union[List[int], int] = (800,),
-    max_size: int = 1333,
-    sample_style: str = 'choice',
-    training: bool = True
-) -> List[T.Augmentation]:
-    """Creates a list of :class:`TransformGen` from config.
+def build_augmentation(cfg: CfgNode, training: bool = True) -> List[T.Augmentation]:
+    """Creates a list of :class:`Augmentation` from config.
 
     Now it includes resizing and flipping.
-    """
-    if not training:
-        sample_style = 'choice'
 
+    Returns:
+        List[Augmentation]
+    """
+    if training:
+        min_size = cfg.INPUT.MIN_SIZE_TRAIN
+        max_size = cfg.INPUT.MAX_SIZE_TRAIN
+        sample_style = cfg.INPUT.MIN_SIZE_TRAIN_SAMPLING
+    else:
+        min_size = cfg.INPUT.MIN_SIZE_TEST
+        max_size = cfg.INPUT.MAX_SIZE_TEST
+        sample_style = 'choice'
     if sample_style == 'range':
-        assert len(min_size) == 2, 'More than 2 ({}) min_size(s) are provided for ranges'.format(
+        assert len(min_size) == 2, 'more than 2 ({}) min_size(s) are provided for ranges'.format(
             len(min_size)
         )
 
-    tfm_gens = [T.ResizeShortestEdge(min_size, max_size, sample_style)]
-
+    augmentation = [T.ResizeShortestEdge(min_size, max_size, sample_style)]
     if training:
-        tfm_gens.append(T.RandomHFlip())
-    logger.info('Transform used in {}: {}'.format('training' if training else 'testing', tfm_gens))
-    return tfm_gens
+        augmentation.append(T.RandomHFlip())
+    logger.info(
+        'Transform used in {}: {}'.format('training' if training else 'testing', augmentation)
+    )
+    return augmentation
 
 
 class DatasetMapper(object):
@@ -62,80 +66,59 @@ class DatasetMapper(object):
 
     def __init__(
         self,
-        augmentation,
-        min_size: Union[List[int], int] = (800,),
-        max_size: int = 1333,
-        sample_style: str = 'choice',
-        crop_type: Optional[str] = None,
-        crop_size: Optional[Tuple[float, float]] = None,
+        *,
+        augmentation: List[T.Augmentation],
+        crop: Optional[T.RandomCrop] = None,
         image_format: str = 'BGR',
         mask_on: bool = False,
         mask_format: str = 'polygon',
         keypoint_on: bool = False,
+        keypoint_hflip_indices=None,
         training: bool = True,
-        vision_datasets: Optional[List[VisionDataset]] = None,
     ) -> None:
         """
         Args:
-            min_size: See :class:`ResizeShortestEdge`.
-            max_size: See :class:`ResizeShortestEdge`.
-            sample_style: See :class:`ResizeShortestEdge`.
-            crop_type: See :class:`RandomCrop`. If None, RandomCrop is disabled.
-            crop_size: See :class:`RandomCrop`. If None, RandomCrop is disabled
+            augmentation: List of augmentation.
+            crop: RandomCrop.
             image_format: See :class:`read_image`.
             mask_on: Whether keep segmentation.
             mask_format: See :func:`annotations_to_instances`.
             keypoint_on: Whether keep keypoints.
+            keypoint_hflip_indices: See :func:`create_keypoint_hflip_indices`.
             training: Whether in training mode.
-            vision_datasets: List of vision datasets, to create keypoint_hflip_indices if needed.
         """
-        if (crop_type is None) ^ (crop_size is None):
-            raise ValueError('crop_type and crop_size should be None or other together')
-
-        self.tfm_gens = build_transform_gen(min_size, max_size, sample_style, training=training)
-
-        if crop_type is not None:
-            self.crop_gen = T.RandomCrop(crop_type, crop_size)
-        else:
-            self.crop_gen = None
-
+        self.augmentation = augmentation
+        self.crop = crop
         self.image_format = image_format
         self.mask_on = mask_on
         self.mask_format = mask_format
         self.keypoint_on = keypoint_on
-
-        if self.keypoint_on and training:
-            self.keypoint_hflip_indices = utils.create_keypoint_hflip_indices(vision_datasets)
-        else:
-            self.keypoint_hflip_indices = None
-
+        self.keypoint_hflip_indices = keypoint_hflip_indices
         self.training = training
 
     @classmethod
-    def from_config(cls, cfg: CfgNode, training: bool):
-        """
-        if cfg.INPUT.CROP.ENABLED and is_train:
-            self.crop = T.RandomCrop(cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE)
-            logging.getLogger(__name__).info("CropGen used in training: " + str(self.crop))
-        else:
-            self.crop = None
+    def from_config(cls, cfg: CfgNode, training: bool) -> 'DatasetMapper':
+        kwargs = {
+            'image_format': cfg.INPUT.FORMAT,
+            'mask_on': cfg.MODEL.MASK_ON,
+            'mask_format': cfg.INPUT.MASK_FORMAT,
+            'keypoint_on': cfg.MODEL.KEYPOINT_ON,
+            'training': training,
+        }
 
-        self.augmentation = utils.build_augmentation(cfg, is_train)
+        if cfg.INPUT.CROP.ENABLED and training:
+            crop = T.RandomCrop(cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE)
+            logger.info('RandomCrop used in training: {}'.format(crop))
+            kwargs['crop'] = crop
 
-        # fmt: off
-        self.img_format     = cfg.INPUT.FORMAT
-        self.mask_on        = cfg.MODEL.MASK_ON
-        self.mask_format    = cfg.INPUT.MASK_FORMAT
-        self.keypoint_on    = cfg.MODEL.KEYPOINT_ON
-        self.load_proposals = cfg.MODEL.LOAD_PROPOSALS
-        # fmt: on
-        if self.keypoint_on and is_train:
-            # Flip only makes sense in training
-            self.keypoint_hflip_indices = utils.create_keypoint_hflip_indices(cfg.DATASETS.TRAIN)
-        else:
-            self.keypoint_hflip_indices = None
-        """
-        pass
+        kwargs['augmentation'] = build_augmentation(cfg, training)
+
+        if cfg.MODEL.KEYPOINT_ON and training:
+            vision_datasets = build_vision_datasets(cfg.DATASETS.TRAIN)
+            keypoint_hflip_indices = utils.create_keypoint_hflip_indices(vision_datasets)
+            kwargs['keypoint_hflip_indices'] = keypoint_hflip_indices
+
+        return cls(**kwargs)
 
     def __call__(self, dataset_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -151,18 +134,18 @@ class DatasetMapper(object):
 
         if not dataset_dict.get('annotations', []):
             image, transforms = T.apply_augmentations(
-                ([self.crop_gen] if self.crop_gen else []) + self.tfm_gens, image
+                ([self.crop] if self.crop else []) + self.augmentation, image
             )
         else:
             # Crop around an instance if there are instances in the image
-            if self.crop_gen:
+            if self.crop:
                 crop_tfm = utils.gen_crop_transform_with_instance(
-                    self.crop_gen.get_crop_size(image.shape[:2]), image.shape[:2],
+                    self.crop.get_crop_size(image.shape[:2]), image.shape[:2],
                     np.random.choice(dataset_dict['annotations'])
                 )
                 image = crop_tfm.apply_image(image)
-            image, transforms = T.apply_augmentations(self.tfm_gens, image)
-            if self.crop_gen:
+            image, transforms = T.apply_augmentations(self.augmentation, image)
+            if self.crop:
                 transforms = crop_tfm + transforms
 
         image_shape = image.shape[:2]  # HxW
@@ -201,7 +184,7 @@ class DatasetMapper(object):
             # cropped by a box [(1,0),(2,2)] (XYXY format). The tight bounding box of the cropped
             # triangle should be [(1,0),(2,1)], which is not equal to the intersection of original
             # bounding box and the cropping box.
-            if self.crop_gen and instances.has('gt_masks'):
+            if self.crop and instances.has('gt_masks'):
                 instances.gt_boxes = instances.gt_masks.get_bounding_boxes()
             dataset_dict['instances'] = utils.filter_empty_instances(instances)
 

@@ -249,7 +249,7 @@ def build_detection_train_loader(cfg: CfgNode, mapper: Callable = None) -> DataL
     Args:
         cfg: The config.
         mapper: A callable that takes a sample (dict) from dataset and returns the format to be
-            consumed by the model. By default it will be `DatasetMapper(cfg, True)`.
+            consumed by the model. By default it will be `DatasetMapper.from_config(cfg, True)`.
     """
     dataset_dicts = get_detection_dataset_dicts(
         build_vision_datasets(cfg.DATASETS.TRAIN),
@@ -260,7 +260,7 @@ def build_detection_train_loader(cfg: CfgNode, mapper: Callable = None) -> DataL
 
     dataset = DatasetFromList(dataset_dicts, copy=False)
     if mapper is None:
-        mapper = DatasetMapper(cfg, True)
+        mapper = DatasetMapper.from_config(cfg, True)
     dataset = MapDataset(dataset, mapper)
 
     sampler_name = cfg.DATALOADER.SAMPLER_TRAIN
@@ -294,7 +294,7 @@ def build_detection_test_loader(cfg: CfgNode, mapper: Callable = None) -> DataLo
 
     dataset = DatasetFromList(dataset_dicts, False)
     if mapper is None:
-        mapper = DatasetMapper(cfg, False)
+        mapper = DatasetMapper.from_config(cfg, False)
     dataset = MapDataset(dataset, mapper)
 
     sampler = InferenceSampler(len(dataset))
