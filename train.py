@@ -9,6 +9,7 @@ from foundation.common.log import configure_logging
 from det.config import get_cfg
 from det.data.build import build_detection_train_loader
 from det.engine.launch import launch
+from det.models.backbones import build_backbone
 from det.utils import comm, env
 
 
@@ -85,9 +86,9 @@ def main(args):
     comm.synchronize()
     for d in data:
         print('{},'.format(d['image_id']))
-    import sys
 
-    sys.exit()
+    backbone = build_backbone(cfg)
+    backbone(data)
 
 
 if __name__ == '__main__':

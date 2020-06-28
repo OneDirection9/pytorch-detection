@@ -1,9 +1,10 @@
 from __future__ import absolute_import, division, print_function
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from foundation.registry import Registry
 
+from det.config import CfgNode
 from det.layers import BaseModule, ShapeSpec
 
 __all__ = ['Backbone', 'BackboneRegistry', 'build_backbone']
@@ -17,13 +18,16 @@ class BackboneRegistry(Registry):
     pass
 
 
-def build_backbone(cfg: Dict[str, Any], input_shape: Optional[ShapeSpec] = None) -> Backbone:
-    """Builds a backbone from config."""
+def build_backbone(cfg: CfgNode, input_shape: Optional[ShapeSpec] = None) -> Backbone:
+    """Builds a backbone from `cfg.MODEL.BACKBONE.NAME`."""
     if input_shape is None:
-        # Default expected 3 channels input
-        input_shape = ShapeSpec(channels=3)
+        input_shape = ShapeSpec(channels=len(cfg.MODEL.PIXEL_MEAN))
 
-    backbone_name = cfg.pop('name')
-    backbone = BackboneRegistry.get(backbone_name)(input_shape, **cfg)
+    backbone_name = cfg.MODEL.BACKBONE.NAME
+    backbone_cls = BackboneRegistry.get(backbone_name)
+    if hasattr(backbone_cls, 'from_config'):
+        backbone = backbone_cls.from_config(cfg, input_shape)
+    else:
+        backbone = backbone_cls(cfg, input_shape)
     assert isinstance(backbone, Backbone)
     return backbone

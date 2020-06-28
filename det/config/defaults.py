@@ -116,7 +116,7 @@ _C.DATALOADER.FILTER_EMPTY_ANNOTATIONS = True
 # ---------------------------------------------------------------------------- #
 _C.MODEL.BACKBONE = CN()
 
-_C.MODEL.BACKBONE.NAME = 'build_resnet_backbone'
+_C.MODEL.BACKBONE.NAME = 'ResNet'
 # Freeze the first several stages so they are not trained.
 # There are 5 stages in ResNet. The first is a convolution, and the following
 # stages are each group of residual blocks.
@@ -440,6 +440,9 @@ _C.MODEL.RESNETS = CN()
 
 _C.MODEL.RESNETS.DEPTH = 50
 _C.MODEL.RESNETS.OUT_FEATURES = ['res4']  # res4 for C4 backbone, res2..5 for FPN backbone
+
+# If <= 0, will not perform classification. Otherwise, will create a linear layer.
+_C.MODEL.RESNETS.NUM_CLASSES = -1
 
 # Number of groups to use; 1 ==> ResNet; > 1 ==> ResNeXt
 _C.MODEL.RESNETS.NUM_GROUPS = 1
