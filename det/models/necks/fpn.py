@@ -220,8 +220,8 @@ class FPN(Neck):
     @classmethod
     def from_config(cls, cfg: CfgNode, input_shape: Dict[str, ShapeSpec]) -> 'FPN':
         """Returns an instance of :class:`FPN` neck without top_block."""
-        in_features = cfg.NECK.FPN.IN_FEATURES
-        out_channels = cfg.NECK.FPN.OUT_CHANNELS
+        in_features = cfg.MODEL.FPN.IN_FEATURES
+        out_channels = cfg.MODEL.FPN.OUT_CHANNELS
         in_channels = [input_shape[f].channels for f in in_features]
         in_strides = [input_shape[f].stride for f in in_features]
 
@@ -230,8 +230,8 @@ class FPN(Neck):
             in_strides=in_strides,
             in_features=in_features,
             out_channels=out_channels,
-            norm=cfg.NECK.FPN.NORM,
-            fuse_type=cfg.NECK.FPN.FUSE_TYPE,
+            norm=cfg.MODEL.FPN.NORM,
+            fuse_type=cfg.MODEL.FPN.FUSE_TYPE,
         )
 
     def forward(self, bottom_up_features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -283,8 +283,8 @@ class RCNNFPNNeck(FPN):
     @classmethod
     def from_config(cls, cfg: CfgNode, input_shape: Dict[str, ShapeSpec]) -> 'FPN':
         """Returns an instance of :class:`FPN` neck with top_block is LastLevelMaxPool."""
-        in_features = cfg.NECK.FPN.IN_FEATURES
-        out_channels = cfg.NECK.FPN.OUT_CHANNELS
+        in_features = cfg.MODEL.FPN.IN_FEATURES
+        out_channels = cfg.MODEL.FPN.OUT_CHANNELS
 
         in_channels = [input_shape[f].channels for f in in_features]
         in_strides = [input_shape[f].stride for f in in_features]
@@ -295,8 +295,8 @@ class RCNNFPNNeck(FPN):
             in_strides=in_strides,
             in_features=in_features,
             out_channels=out_channels,
-            norm=cfg.NECK.FPN.NORM,
-            fuse_type=cfg.NECK.FPN.FUSE_TYPE,
+            norm=cfg.MODEL.FPN.NORM,
+            fuse_type=cfg.MODEL.FPN.FUSE_TYPE,
             top_block=top_block,
         )
 
@@ -307,8 +307,8 @@ class RetinaNetFPNNeck(FPN):
     @classmethod
     def from_config(cls, cfg: CfgNode, input_shape: Dict[str, ShapeSpec]) -> 'FPN':
         """Returns an instance of :class:`FPN` neck with top_block is LastLevelP6P7."""
-        in_features = cfg.NECK.FPN.IN_FEATURES
-        out_channels = cfg.NECK.FPN.OUT_CHANNELS
+        in_features = cfg.MODEL.FPN.IN_FEATURES
+        out_channels = cfg.MODEL.FPN.OUT_CHANNELS
 
         in_channels = [input_shape[f].channels for f in in_features]
         in_strides = [input_shape[f].stride for f in in_features]
@@ -319,7 +319,7 @@ class RetinaNetFPNNeck(FPN):
             in_strides=in_strides,
             in_features=in_features,
             out_channels=out_channels,
-            norm=cfg.NECK.FPN.NORM,
-            fuse_type=cfg.NECK.FPN.FUSE_TYPE,
+            norm=cfg.MODEL.FPN.NORM,
+            fuse_type=cfg.MODEL.FPN.FUSE_TYPE,
             top_block=top_block,
         )

@@ -111,25 +111,19 @@ _C.DATALOADER.REPEAT_THRESHOLD = 0.0
 # annotations at train time.
 _C.DATALOADER.FILTER_EMPTY_ANNOTATIONS = True
 
-# --------------------------------------------------------------------------- #
-# Backbone options
-# --------------------------------------------------------------------------- #
-_C.BACKBONE = CN()
-
-#
-# ResNet options
-#
-
 # ---------------------------------------------------------------------------- #
 # Backbone options
 # ---------------------------------------------------------------------------- #
 _C.MODEL.BACKBONE = CN()
 
 _C.MODEL.BACKBONE.NAME = 'ResNet'
-# Freeze the first several stages so they are not trained.
-# There are 5 stages in ResNet. The first is a convolution, and the following
-# stages are each group of residual blocks.
-_C.MODEL.BACKBONE.FREEZE_AT = 2
+
+# --------------------------------------------------------------------------- #
+# Neck options
+# --------------------------------------------------------------------------- #
+_C.MODEL.NECK = CN()
+
+_C.MODEL.NECK.NAME = ''
 
 # ---------------------------------------------------------------------------- #
 # FPN options
@@ -212,6 +206,9 @@ _C.MODEL.RPN.IOU_LABELS = [0, -1, 1]
 _C.MODEL.RPN.BATCH_SIZE_PER_IMAGE = 256
 # Target fraction of foreground (positive) examples per RPN minibatch
 _C.MODEL.RPN.POSITIVE_FRACTION = 0.5
+# Options are: "smooth_l1", "giou"
+_C.MODEL.RPN.BBOX_REG_LOSS_TYPE = 'smooth_l1'
+_C.MODEL.RPN.BBOX_REG_LOSS_WEIGHT = 1.0
 # Weights on (dx, dy, dw, dh) for normalizing RPN anchor regression targets
 _C.MODEL.RPN.BBOX_REG_WEIGHTS = (1.0, 1.0, 1.0, 1.0)
 # The transition point from L1 to L2 loss. Set to 0.0 to make the loss simply L1.
@@ -446,6 +443,11 @@ _C.MODEL.RETINANET.SMOOTH_L1_LOSS_BETA = 0.1
 # These options apply to both
 # ---------------------------------------------------------------------------- #
 _C.MODEL.RESNETS = CN()
+
+# Freeze the first several stages so they are not trained.
+# There are 5 stages in ResNet. The first is a convolution, and the following
+# stages are each group of residual blocks.
+_C.MODEL.RESNETS.FREEZE_AT = 2
 
 _C.MODEL.RESNETS.DEPTH = 50
 _C.MODEL.RESNETS.OUT_FEATURES = ['res4']  # res4 for C4 backbone, res2..5 for FPN backbone

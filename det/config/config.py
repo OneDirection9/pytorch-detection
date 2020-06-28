@@ -10,6 +10,6 @@ __all__ = ['CfgNode', 'get_cfg']
 
 def get_cfg() -> CfgNode:
     """Gets a copy of default config."""
-    from .new_defaults import _C
+    from .defaults import _C
 
     return _C.clone()

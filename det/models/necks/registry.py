@@ -19,8 +19,8 @@ class NeckRegistry(Registry):
 
 
 def build_neck(cfg: CfgNode, input_shape: Dict[str, ShapeSpec]) -> Neck:
-    """Builds a neck from `cfg.NECK.NAME`."""
-    neck_name = cfg.NECK.NAME
+    """Builds a neck from `cfg.MODEL.NECK.NAME`."""
+    neck_name = cfg.MODEL.NECK.NAME
     neck_cls = NeckRegistry.get(neck_name)
     if hasattr(neck_cls, 'from_config'):
         neck = neck_cls.from_config(cfg, input_shape)
