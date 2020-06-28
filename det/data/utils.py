@@ -163,7 +163,7 @@ def read_image(file_name: str, format: str = None) -> np.ndarray:
         # work around this bug: https://github.com/python-pillow/Pillow/issues/3973
         image = _apply_exif_orientation(image)
 
-    return convert_pil_to_numpy(image, format)
+        return convert_pil_to_numpy(image, format)
 
 
 def check_image_size(dataset_dict: Dict[str, Any], image: np.ndarray) -> None:
