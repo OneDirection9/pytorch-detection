@@ -1,60 +1,102 @@
 from __future__ import absolute_import, division, print_function
 
-from foundation.common import file_io as fdn_io
+import argparse
+import os
+import sys
+
 from foundation.common.log import configure_logging
 
-from det.data.build import get_dataset_examples
+from det.config import get_cfg
+from det.data.build import build_detection_train_loader
+from det.engine.launch import launch
+from det.utils import comm, env
 
-configure_logging()
-cfg = fdn_io.load('./configs/demo.yaml')
 
-examples = get_dataset_examples(cfg['datasets']['train'], cfg['datasets']['train_pipeline'])
-print(len(examples))
+def default_argument_parser(epilog=None):
+    """
+    Create a parser with some common arguments used by detectron2 users.
 
-# from foundation.backends.torch.engine import default_argument_parser
-# from foundation.backends.torch.engine import default_setup
-# from foundation.backends.torch.engine import launch
-#
-# logger = logging.getLogger(__name__)
-#
-#
-# def setup(args):
-#     cfg = fdn.io.load(args.config_file)
-#     default_setup(cfg, args)
-#
-#     logger.info('[HELP]: Refer <PROJECT_ROOT>/configs/demo.yaml to write your own config')
-#
-#     # Correct settings
-#     if not torch.cuda.is_available():
-#         logger.warning('No CUDA device(s) available and correcting some settings')
-#
-#         num_workers = cfg['dataloader']['num_workers']
-#         if num_workers != 0:
-#             cfg['dataloader']['num_workers'] = 0
-#             logger.warning('\tCorrected num_workers: {} -> 0'.format(num_workers))
-#
-#         device = cfg['model']['device']
-#         if device == 'cuda':
-#             cfg['model']['device'] = 'cpu'
-#             logger.warning('\tCorrected model device: cuda -> cpu')
-#
-#     return cfg
-#
-#
-# def main(args):
-#     cfg = setup(args)
-#
-#     runner = Runner(cfg)
-#     runner.train(0, 1)
-#
-#
-# if __name__ == '__main__':
-#     args = default_argument_parser().parse_args()
-#     launch(
-#         main,
-#         num_gpus_per_machine=args.num_gpus,
-#         num_machines=args.num_machines,
-#         machine_rank=args.machine_rank,
-#         dist_url=args.dist_url,
-#         args=(args,),
-#     )
+    Args:
+        epilog (str): epilog passed to ArgumentParser describing the usage.
+
+    Returns:
+        argparse.ArgumentParser:
+    """
+    parser = argparse.ArgumentParser(
+        epilog=epilog or f"""
+Examples:
+
+Run on single machine:
+    $ {sys.argv[0]} --num-gpus 8 --config-file cfg.yaml MODEL.WEIGHTS /path/to/weight.pth
+
+Run on multiple machines:
+    (machine0)$ {sys.argv[0]} --machine-rank 0 --num-machines 2 --dist-url <URL> [--other-flags]
+    (machine1)$ {sys.argv[0]} --machine-rank 1 --num-machines 2 --dist-url <URL> [--other-flags]
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument('--config-file', default='', metavar='FILE', help='path to config file')
+    parser.add_argument(
+        '--resume',
+        action='store_true',
+        help='whether to attempt to resume from the checkpoint directory',
+    )
+    parser.add_argument('--eval-only', action='store_true', help='perform evaluation only')
+    parser.add_argument('--num-gpus', type=int, default=1, help='number of gpus *per machine*')
+    parser.add_argument('--num-machines', type=int, default=1, help='total number of machines')
+    parser.add_argument(
+        '--machine-rank', type=int, default=0, help='the rank of this machine (unique per machine)'
+    )
+
+    # PyTorch still may leave orphan processes in multi-gpu training.
+    # Therefore we use a deterministic way to obtain port,
+    # so that users are aware of orphan processes by seeing the port occupied.
+    port = 2 ** 15 + 2 ** 14 + hash(os.getuid() if sys.platform != 'win32' else 1) % 2 ** 14
+    parser.add_argument(
+        '--dist-url',
+        default='tcp://127.0.0.1:{}'.format(port),
+        help='initialization URL for pytorch distributed backend. See '
+        'https://pytorch.org/docs/stable/distributed.html for details.',
+    )
+    parser.add_argument(
+        'opts',
+        help='Modify config options using the command-line',
+        default=None,
+        nargs=argparse.REMAINDER,
+    )
+    return parser
+
+
+def main(args):
+    cfg = get_cfg()
+    cfg.merge_from_file(args.config_file)
+    cfg.merge_from_list(args.opts)
+    cfg.freeze()
+
+    rank = comm.get_rank()
+    if comm.is_main_process():
+        configure_logging()
+
+    env.seed_all_rng(cfg.SEED + rank)
+
+    dataloaer = build_detection_train_loader(cfg)
+    diter = iter(dataloaer)
+    data = next(diter)
+    comm.synchronize()
+    for d in data:
+        print('{},'.format(d['image_id']))
+    import sys
+
+    sys.exit()
+
+
+if __name__ == '__main__':
+    args = default_argument_parser().parse_args()
+    launch(
+        main,
+        args.num_gpus,
+        num_machines=args.num_machines,
+        machine_rank=args.machine_rank,
+        dist_url=args.dist_url,
+        args=(args,)
+    )
