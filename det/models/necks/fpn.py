@@ -12,6 +12,7 @@ from foundation.nn import weight_init
 from torch import nn
 from torch.nn import functional as F
 
+from det.config import CfgNode
 from det.layers import BaseModule, Conv2d, ShapeSpec, get_norm
 from .registry import Neck, NeckRegistry
 
@@ -20,8 +21,8 @@ __all__ = [
     'LastLevelMaxPool',
     'LastLevelP6P7',
     'FPN',
-    'rcnn_fpn_neck',
-    'retinanet_fpn_neck',
+    'RCNNFPNNeck',
+    'RetinaNetFPNNeck',
 ]
 
 
@@ -118,6 +119,7 @@ class LastLevelP6P7(TopBlock):
         return self._output_shape
 
 
+@NeckRegistry.register('FPN')
 class FPN(Neck):
     """`Feature Pyramid Networks for Object Detection`_.
 
@@ -209,11 +211,28 @@ class FPN(Neck):
         assert set(self._output_shape.keys()).issubset([name for name, _ in self.named_children()])
 
         if self.top_block is not None:
-            current_stride = in_strides[-1]
+            block_in_stride = in_strides[-1]
             for k, v in self.top_block.output_shape.items():
-                current_stride = current_stride * v.stride
                 assert k not in self._output_shape, '{} already in the FPN output_shape'.format(k)
+                current_stride = block_in_stride * v.stride
                 self._output_shape[k] = ShapeSpec(channels=v.channels, stride=current_stride)
+
+    @classmethod
+    def from_config(cls, cfg: CfgNode, input_shape: Dict[str, ShapeSpec]) -> 'FPN':
+        """Returns an instance of :class:`FPN` neck without top_block."""
+        in_features = cfg.NECK.FPN.IN_FEATURES
+        out_channels = cfg.NECK.FPN.OUT_CHANNELS
+        in_channels = [input_shape[f].channels for f in in_features]
+        in_strides = [input_shape[f].stride for f in in_features]
+
+        return cls(
+            in_channels=in_channels,
+            in_strides=in_strides,
+            in_features=in_features,
+            out_channels=out_channels,
+            norm=cfg.NECK.FPN.NORM,
+            fuse_type=cfg.NECK.FPN.FUSE_TYPE,
+        )
 
     def forward(self, bottom_up_features: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # Build laterals
@@ -258,72 +277,49 @@ def _assert_strides_are_log2_contiguous(strides: List[int]) -> None:
             raise ValueError('Strides {} {} are not log2 contiguous'.format(stride, strides[i - 1]))
 
 
-"""
-Wrappers of FPN presetting top_block
-"""
-
-
 @NeckRegistry.register('RCNN_FPN_Neck')
-def rcnn_fpn_neck(
-    input_shape: Dict[str, ShapeSpec],
-    *,
-    in_features: List[str],
-    out_channels: int = 256,
-    norm: Union[str, Callable] = '',
-    fuse_type: str = 'sum',
-) -> FPN:
-    """Returns an instance of :class:`FPN` neck with top_block is LastLevelMaxPool.
+class RCNNFPNNeck(FPN):
 
-    Args:
-        input_shape: Output shape of backbone, e.g. resnet.
-        in_features: See :class:`FPN`.
-        out_channels: See :class:`FPN`.
-        norm: See :class:`FPN`.
-        fuse_type: See :class:`FPN`.
-    """
-    in_channels = [input_shape[f].channels for f in in_features]
-    in_strides = [input_shape[f].stride for f in in_features]
-    top_block = LastLevelMaxPool(out_channels)
+    @classmethod
+    def from_config(cls, cfg: CfgNode, input_shape: Dict[str, ShapeSpec]) -> 'FPN':
+        """Returns an instance of :class:`FPN` neck with top_block is LastLevelMaxPool."""
+        in_features = cfg.NECK.FPN.IN_FEATURES
+        out_channels = cfg.NECK.FPN.OUT_CHANNELS
 
-    return FPN(
-        in_channels=in_channels,
-        in_strides=in_strides,
-        in_features=in_features,
-        out_channels=out_channels,
-        norm=norm,
-        fuse_type=fuse_type,
-        top_block=top_block,
-    )
+        in_channels = [input_shape[f].channels for f in in_features]
+        in_strides = [input_shape[f].stride for f in in_features]
+        top_block = LastLevelMaxPool(out_channels)
+
+        return cls(
+            in_channels=in_channels,
+            in_strides=in_strides,
+            in_features=in_features,
+            out_channels=out_channels,
+            norm=cfg.NECK.FPN.NORM,
+            fuse_type=cfg.NECK.FPN.FUSE_TYPE,
+            top_block=top_block,
+        )
 
 
 @NeckRegistry.register('RetinaNet_FPN_Neck')
-def retinanet_fpn_neck(
-    input_shape: Dict[str, ShapeSpec],
-    *,
-    in_features: List[str],
-    out_channels: int = 256,
-    norm: Union[str, Callable] = '',
-    fuse_type: str = 'sum',
-) -> FPN:
-    """Returns an instance of :class:`FPN` neck with top_block is LastLevelP6P7.
+class RetinaNetFPNNeck(FPN):
 
-    Args:
-        input_shape: Output shape of backbone, e.g. resnet.
-        in_features: See :class:`FPN`.
-        out_channels: See :class:`FPN`.
-        norm: See :class:`FPN`.
-        fuse_type: See :class:`FPN`.
-    """
-    in_channels = [input_shape[f].channels for f in in_features]
-    in_strides = [input_shape[f].stride for f in in_features]
-    top_block = LastLevelP6P7(input_shape['res5'].channels, out_channels)
+    @classmethod
+    def from_config(cls, cfg: CfgNode, input_shape: Dict[str, ShapeSpec]) -> 'FPN':
+        """Returns an instance of :class:`FPN` neck with top_block is LastLevelP6P7."""
+        in_features = cfg.NECK.FPN.IN_FEATURES
+        out_channels = cfg.NECK.FPN.OUT_CHANNELS
 
-    return FPN(
-        in_channels=in_channels,
-        in_strides=in_strides,
-        in_features=in_features,
-        out_channels=out_channels,
-        norm=norm,
-        fuse_type=fuse_type,
-        top_block=top_block,
-    )
+        in_channels = [input_shape[f].channels for f in in_features]
+        in_strides = [input_shape[f].stride for f in in_features]
+        top_block = LastLevelP6P7(input_shape['res5'].channels, out_channels)
+
+        return cls(
+            in_channels=in_channels,
+            in_strides=in_strides,
+            in_features=in_features,
+            out_channels=out_channels,
+            norm=cfg.NECK.FPN.NORM,
+            fuse_type=cfg.NECK.FPN.FUSE_TYPE,
+            top_block=top_block,
+        )

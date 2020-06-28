@@ -10,6 +10,7 @@ from det.config import get_cfg
 from det.data.build import build_detection_train_loader
 from det.engine.launch import launch
 from det.models.backbones import build_backbone
+from det.models.necks import build_neck
 from det.utils import comm, env
 
 
@@ -72,7 +73,7 @@ def main(args):
     cfg = get_cfg()
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
-    cfg.freeze()
+    # cfg.freeze()
 
     rank = comm.get_rank()
     if comm.is_main_process():
@@ -88,7 +89,19 @@ def main(args):
         print('{},'.format(d['image_id']))
 
     backbone = build_backbone(cfg)
-    backbone(data)
+    print(backbone.output_shape)
+
+    cfg.merge_from_list(['NECK.NAME', 'FPN'])
+    neck = build_neck(cfg, backbone.output_shape)
+    print(neck.output_shape)
+
+    cfg.merge_from_list(['NECK.NAME', 'RCNN_FPN_Neck'])
+    neck = build_neck(cfg, backbone.output_shape)
+    print(neck.output_shape)
+
+    cfg.merge_from_list(['NECK.NAME', 'RetinaNet_FPN_Neck'])
+    neck = build_neck(cfg, backbone.output_shape)
+    print(neck.output_shape)
 
 
 if __name__ == '__main__':

@@ -19,11 +19,11 @@ class BackboneRegistry(Registry):
 
 
 def build_backbone(cfg: CfgNode, input_shape: Optional[ShapeSpec] = None) -> Backbone:
-    """Builds a backbone from `cfg.MODEL.BACKBONE.NAME`."""
+    """Builds a backbone from `cfg.BACKBONE.NAME`."""
     if input_shape is None:
         input_shape = ShapeSpec(channels=len(cfg.MODEL.PIXEL_MEAN))
 
-    backbone_name = cfg.MODEL.BACKBONE.NAME
+    backbone_name = cfg.BACKBONE.NAME
     backbone_cls = BackboneRegistry.get(backbone_name)
     if hasattr(backbone_cls, 'from_config'):
         backbone = backbone_cls.from_config(cfg, input_shape)

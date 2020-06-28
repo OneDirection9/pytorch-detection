@@ -346,21 +346,21 @@ class ResNet(Backbone):
         norm = cfg.MODEL.RESNETS.NORM
         stem = BasicStem(
             in_channels=input_shape.channels,
-            out_channels=cfg.MODEL.RESNETS.STEM_OUT_CHANNELS,
+            out_channels=cfg.BACKBONE.RESNETS.STEM_OUT_CHANNELS,
             norm=norm,
         )
 
-        freeze_at = cfg.MODEL.BACKBONE.FREEZE_AT
-        out_features = cfg.MODEL.RESNETS.OUT_FEATURES
-        num_classes = cfg.MODEL.RESNETS.NUM_CLASSES
-        depth = cfg.MODEL.RESNETS.DEPTH
-        num_groups = cfg.MODEL.RESNETS.NUM_GROUPS
-        width_per_group = cfg.MODEL.RESNETS.WIDTH_PER_GROUP
+        freeze_at = cfg.BACKBONE.RESNETS.FREEZE_AT
+        out_features = cfg.BACKBONE.RESNETS.OUT_FEATURES
+        num_classes = cfg.BACKBONE.RESNETS.NUM_CLASSES
+        depth = cfg.BACKBONE.RESNETS.DEPTH
+        num_groups = cfg.BACKBONE.RESNETS.NUM_GROUPS
+        width_per_group = cfg.BACKBONE.RESNETS.WIDTH_PER_GROUP
         bottleneck_channels = num_groups * width_per_group
-        in_channels = cfg.MODEL.RESNETS.STEM_OUT_CHANNELS
-        out_channels = cfg.MODEL.RESNETS.RES2_OUT_CHANNELS
-        stride_in_1x1 = cfg.MODEL.RESNETS.STRIDE_IN_1X1
-        res5_dilation = cfg.MODEL.RESNETS.RES5_DILATION
+        in_channels = cfg.BACKBONE.RESNETS.STEM_OUT_CHANNELS
+        out_channels = cfg.BACKBONE.RESNETS.RES2_OUT_CHANNELS
+        stride_in_1x1 = cfg.BACKBONE.RESNETS.STRIDE_IN_1X1
+        res5_dilation = cfg.BACKBONE.RESNETS.RES5_DILATION
 
         if res5_dilation not in (1, 2):
             raise ValueError('res5_dilation can only be 1 or 2. Got {}'.format(res5_dilation))
@@ -398,7 +398,7 @@ class ResNet(Backbone):
                 stage_kwargs['dilation'] = dilation
                 stage_kwargs['num_groups'] = num_groups
 
-            stage = ResNet.make_stage(**stage_kwargs)
+            stage = cls.make_stage(**stage_kwargs)
             stages.append(stage)
             # Update arguments for next stage
             in_channels = out_channels

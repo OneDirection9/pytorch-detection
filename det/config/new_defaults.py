@@ -116,36 +116,80 @@ _C.DATALOADER.FILTER_EMPTY_ANNOTATIONS = True
 # --------------------------------------------------------------------------- #
 _C.BACKBONE = CN()
 
-#
-# ResNet options
-#
+_C.BACKBONE.NAME = 'ResNet'
 
 # ---------------------------------------------------------------------------- #
-# Backbone options
+# ResNe[X]t options (ResNets = {ResNet, ResNeXt}
+# Note that parts of a resnet may be used for both the backbone and the head
+# These options apply to both
 # ---------------------------------------------------------------------------- #
-_C.MODEL.BACKBONE = CN()
+_C.BACKBONE.RESNETS = CN()
 
-_C.MODEL.BACKBONE.NAME = 'ResNet'
 # Freeze the first several stages so they are not trained.
 # There are 5 stages in ResNet. The first is a convolution, and the following
 # stages are each group of residual blocks.
-_C.MODEL.BACKBONE.FREEZE_AT = 2
+_C.BACKBONE.RESNETS.FREEZE_AT = 2
 
-# ---------------------------------------------------------------------------- #
+_C.BACKBONE.RESNETS.DEPTH = 50
+_C.BACKBONE.RESNETS.OUT_FEATURES = ['res4']  # res4 for C4 backbone, res2..5 for FPN
+
+# If <= 0, will not perform classification. Otherwise, will create a linear layer
+_C.BACKBONE.RESNETS.NUM_CLASSES = -1
+
+# Number of groups to use; 1 ==> ResNet; > 1 ==> ResNeXt
+_C.BACKBONE.RESNETS.NUM_GROUPS = 1
+
+# Options: FrozenBN, GN, SyncBN, BN
+_C.BACKBONE.RESNETS.NORM = 'FrozenBN'
+
+# Baseline width of each group
+# Scaling this parameters will scale the width of all bottleneck layers.
+_C.BACKBONE.RESNETS.WIDTH_PER_GROUP = 64
+
+# Place the stride 2 conv on the 1x1 filter
+# Use True only for the original MSRA ResNet; use False for C2 and Torch models
+_C.BACKBONE.RESNETS.STRIDE_IN_1X1 = True
+
+# Apply dilation in the stage "res5"
+_C.BACKBONE.RESNETS.RES5_DILATION = 1
+
+# Output width of res2. Scaling this parameters will scale the width of all 1x1 convs in ResNet
+# For R18 and R34, this needs to be set to 64
+_C.BACKBONE.RESNETS.RES2_OUT_CHANNELS = 256
+_C.BACKBONE.RESNETS.STEM_OUT_CHANNELS = 64
+
+# Apply Deformable Convolution in stages
+# Specify if apply deform_conv on Res2, Res3, Res4, Res5
+_C.BACKBONE.RESNETS.DEFORM_ON_PER_STAGE = [False, False, False, False]
+# Use True to use modulated deform_conv (DeformableV2, https://arxiv.org/abs/1811.11168);
+# Use False for DeformableV1.
+_C.BACKBONE.RESNETS.DEFORM_MODULATED = False
+# Number of groups in deformable conv.
+_C.BACKBONE.RESNETS.DEFORM_NUM_GROUPS = 1
+
+# --------------------------------------------------------------------------- #
+# Neck options
+# --------------------------------------------------------------------------- #
+_C.NECK = CN()
+
+_C.NECK.NAME = 'RCNN_FPN_Neck'
+
+# --------------------------------------------------------------------------- #
 # FPN options
-# ---------------------------------------------------------------------------- #
-_C.MODEL.FPN = CN()
+# --------------------------------------------------------------------------- #
+_C.NECK.FPN = CN()
+
 # Names of the input feature maps to be used by FPN
 # They must have contiguous power of 2 strides
 # e.g., ["res2", "res3", "res4", "res5"]
-_C.MODEL.FPN.IN_FEATURES = []
-_C.MODEL.FPN.OUT_CHANNELS = 256
+_C.NECK.FPN.IN_FEATURES = []
+_C.NECK.FPN.OUT_CHANNELS = 256
 
 # Options: "" (no norm), "GN"
-_C.MODEL.FPN.NORM = ''
+_C.NECK.FPN.NORM = ''
 
 # Types for fusing the FPN top-down and lateral features. Can be either "sum" or "avg"
-_C.MODEL.FPN.FUSE_TYPE = 'sum'
+_C.NECK.FPN.FUSE_TYPE = 'sum'
 
 # ---------------------------------------------------------------------------- #
 # Proposal generator options
