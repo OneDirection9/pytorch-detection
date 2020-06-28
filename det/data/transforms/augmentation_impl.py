@@ -12,13 +12,12 @@ from foundation.transforms import (
     CropTransform,
     HFlipTransform,
     NoOpTransform,
-    ResizeTransform,
     Transform,
     VFlipTransform,
 )
 
 from .augmentation import Augmentation
-from .transform import ExtentTransform, RotationTransform
+from .transform import ExtentTransform, ResizeTransform, RotationTransform
 
 __all__ = [
     'RandomApply',
