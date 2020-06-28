@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from PIL import Image, ImageOps
+from PIL import Image
 from pycocotools import mask as mask_util
 
 from det.structures import (
@@ -41,6 +41,9 @@ logger = logging.getLogger(__name__)
 # https://en.wikipedia.org/wiki/YUV#SDTV_with_BT.601
 _M_RGB2YUV = [[0.299, 0.587, 0.114], [-0.14713, -0.28886, 0.436], [0.615, -0.51499, -0.10001]]
 _M_YUV2RGB = [[1.0, 0.0, 1.13983], [1.0, -0.39465, -0.58060], [1.0, 2.03211, 0.0]]
+
+# https://www.exiv2.org/tags.html
+_EXIF_ORIENT = 274  # exif 'Orientation' tag
 
 
 def convert_pil_to_numpy(image: Image, format: str) -> np.ndarray:
@@ -101,6 +104,47 @@ def convert_image_to_rgb(image: Union[np.ndarray, torch.Tensor], format: str) ->
     return image
 
 
+def _apply_exif_orientation(image: Image) -> Image:
+    """Applies the exif orientation correctly.
+
+    This code exists per the bug:
+      https://github.com/python-pillow/Pillow/issues/3973
+    with the function `ImageOps.exif_transpose`. The Pillow source raises errors with
+    various methods, especially `tobytes`
+    Function based on:
+      https://github.com/wkentaro/labelme/blob/v4.5.4/labelme/utils/image.py#L59
+      https://github.com/python-pillow/Pillow/blob/7.1.2/src/PIL/ImageOps.py#L527
+
+    Args:
+        image: A PIL image
+    Returns:
+        The PIL image with exif orientation applied, if applicable.
+    """
+    if not hasattr(image, 'getexif'):
+        return image
+
+    exif = image.getexif()
+
+    if exif is None:
+        return image
+
+    orientation = exif.get(_EXIF_ORIENT)
+
+    method = {
+        2: Image.FLIP_LEFT_RIGHT,
+        3: Image.ROTATE_180,
+        4: Image.FLIP_TOP_BOTTOM,
+        5: Image.TRANSPOSE,
+        6: Image.ROTATE_270,
+        7: Image.TRANSVERSE,
+        8: Image.ROTATE_90,
+    }.get(orientation)
+
+    if method is not None:
+        return image.transpose(method)
+    return image
+
+
 def read_image(file_name: str, format: str = None) -> np.ndarray:
     """Reads an image into the given format.
 
@@ -114,13 +158,10 @@ def read_image(file_name: str, format: str = None) -> np.ndarray:
         An HxWxC image in the given format, which is 0-255, uint8 for supported image modes in PIL
         or "BGR"; float (0-1 for Y) for YUV-BT.601.
     """
-    image = Image.open(file_name)
-
-    # capture and ignore this bug: https://github.com/python-pillow/Pillow/issues/3973
-    try:
-        image = ImageOps.exif_transpose(image)
-    except Exception:
-        pass
+    with open(file_name, 'rb') as f:
+        image = Image.open(f)
+        # work around this bug: https://github.com/python-pillow/Pillow/issues/3973
+        image = _apply_exif_orientation(image)
 
     return convert_pil_to_numpy(image, format)
 
