@@ -87,7 +87,7 @@ def filter_images_with_few_keypoints(
         )
 
     dataset_dicts = [
-        x for x in dataset_dicts if visible_keypoints_in_image(x['annotations']) > min_keypoints
+        x for x in dataset_dicts if visible_keypoints_in_image(x['annotations']) >= min_keypoints
     ]
     num_after = len(dataset_dicts)
     logger.info(
