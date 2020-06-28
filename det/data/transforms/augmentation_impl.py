@@ -15,9 +15,10 @@ from foundation.transforms import (
     Transform,
     VFlipTransform,
 )
+from PIL import Image
 
 from .augmentation import Augmentation
-from .transform import ExtentTransform, ResizeTransform, RotationTransform
+from .transform import ExtentTransform, ResizeTransform2, RotationTransform
 
 __all__ = [
     'RandomApply',
@@ -120,7 +121,7 @@ class RandomVFlip(Augmentation):
 class Resize(Augmentation):
     """Resizing image to a target size."""
 
-    def __init__(self, shape: Union[Tuple[int, int], int], interp: str = 'bilinear') -> None:
+    def __init__(self, shape: Union[Tuple[int, int], int], interp: int = Image.BILINEAR) -> None:
         """
         Args:
             shape: (H, W) tuple or a int.
@@ -134,7 +135,7 @@ class Resize(Augmentation):
         self.interp = interp
 
     def get_transform(self, image: np.ndarray) -> Transform:
-        return ResizeTransform(
+        return ResizeTransform2(
             image.shape[0], image.shape[1], self.shape[0], self.shape[1], self.interp
         )
 
@@ -150,7 +151,7 @@ class ResizeShortestEdge(Augmentation):
         short: Union[List[int], int],
         max_size: int = sys.maxsize,
         sample_style: str = 'range',
-        interp: str = 'bilinear'
+        interp: int = Image.BILINEAR
     ) -> None:
         """
         Args:
@@ -193,7 +194,7 @@ class ResizeShortestEdge(Augmentation):
             new_w = new_w * scale
         new_w = int(new_w + 0.5)
         new_h = int(new_h + 0.5)
-        return ResizeTransform(h, w, new_h, new_w, interp=self.interp)
+        return ResizeTransform2(h, w, new_h, new_w, interp=self.interp)
 
 
 class RandomCrop(Augmentation):

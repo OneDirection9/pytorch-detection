@@ -195,7 +195,7 @@ class RotationTransform(Transform):
         return rm
 
 
-class ResizeTransform(Transform):
+class ResizeTransform2(Transform):
     """
     Resize the image to a target size.
     """
@@ -250,7 +250,7 @@ class ResizeTransform(Transform):
         return segmentation
 
     def inverse(self):
-        return ResizeTransform(self.new_h, self.new_w, self.h, self.w, self.interp)
+        return ResizeTransform2(self.new_h, self.new_w, self.h, self.w, self.interp)
 
 
 def HFlip_rotated_box(transform: HFlipTransform, rotated_boxes: np.ndarray) -> np.ndarray:
@@ -271,7 +271,7 @@ def HFlip_rotated_box(transform: HFlipTransform, rotated_boxes: np.ndarray) -> n
     return rotated_boxes
 
 
-def Resize_rotated_box(transform: ResizeTransform, rotated_boxes: np.ndarray) -> np.ndarray:
+def Resize_rotated_box(transform: ResizeTransform2, rotated_boxes: np.ndarray) -> np.ndarray:
     """Apples the resizing transform on rotated boxes.
 
     For details of how these (approximation) formulas are derived, please refer to
@@ -297,4 +297,4 @@ def Resize_rotated_box(transform: ResizeTransform, rotated_boxes: np.ndarray) ->
 
 
 HFlipTransform.register_type('rotated_box', HFlip_rotated_box)
-ResizeTransform.register_type('rotated_box', Resize_rotated_box)
+ResizeTransform2.register_type('rotated_box', Resize_rotated_box)
