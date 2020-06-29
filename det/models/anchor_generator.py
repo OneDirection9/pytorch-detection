@@ -354,7 +354,9 @@ class RotatedAnchorGenerator(nn.Module):
 
     def _grid_anchors(self, grid_sizes: List[Tuple[int, int]]) -> List[torch.Tensor]:
         anchors = []
-        for size, stride, base_anchors in zip(grid_sizes, self._strides, self.cell_anchors):
+        # buffers() not supported by torchscript. use named_buffers() instead
+        buffers: List[torch.Tensor] = [x[1] for x in self.cell_anchors.named_buffers()]
+        for size, stride, base_anchors in zip(grid_sizes, self._strides, buffers):
             shift_x, shift_y = _create_grid_offsets(size, stride, self._offset, base_anchors.device)
             zeros = torch.zeros_like(shift_x)
             shifts = torch.stack((shift_x, shift_y, zeros, zeros, zeros), dim=1)
