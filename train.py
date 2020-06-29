@@ -12,6 +12,7 @@ from det.engine.launch import launch
 from det.models.anchor_generator import build_anchor_generator
 from det.models.backbones import build_backbone
 from det.models.necks import build_neck
+from det.models.proposal_generator import build_proposal_generator
 from det.utils import comm, env
 
 
@@ -96,11 +97,11 @@ def main(args):
     neck = build_neck(cfg, backbone.output_shape)
     print(neck.output_shape)
 
-    cfg.merge_from_list(['MODEL.NECK.NAME', 'RCNNFPNNeck'])
+    cfg.merge_from_list(['MODEL.NECK.NAME', 'RetinaNetFPNNeck'])
     neck = build_neck(cfg, backbone.output_shape)
     print(neck.output_shape)
 
-    cfg.merge_from_list(['MODEL.NECK.NAME', 'RetinaNetFPNNeck'])
+    cfg.merge_from_list(['MODEL.NECK.NAME', 'RCNNFPNNeck'])
     neck = build_neck(cfg, backbone.output_shape)
     print(neck.output_shape)
 
@@ -111,6 +112,9 @@ def main(args):
     cfg.merge_from_list(['MODEL.ANCHOR_GENERATOR.NAME', 'RotatedAnchorGenerator'])
     ag = build_anchor_generator(cfg, list(neck.output_shape.values()))
     print(ag.num_anchors)
+
+    pg = build_proposal_generator(cfg, neck.output_shape)
+    print(pg)
 
 
 if __name__ == '__main__':

@@ -6,20 +6,22 @@ from __future__ import absolute_import, division, print_function
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-from foundation.nn import smooth_l1_loss, weight_init
+from foundation.nn import giou_loss, smooth_l1_loss, weight_init
+from foundation.registry import Registry
 from torch import nn
 from torch.nn import functional as F
 
+from det.config import CfgNode
 from det.layers import ShapeSpec, cat
 from det.structures import Boxes, ImageList, Instances, RotatedBoxes, pairwise_iou
-from ..anchor_generator import DefaultAnchorGenerator
+from ..anchor_generator import build_anchor_generator
 from ..box_regression import Box2BoxTransform
 from ..matcher import Matcher
 from ..sampling import subsample_labels
 from .registry import ProposalGeneratorRegistry
 from .utils import find_top_rpn_proposals
 
-__all__ = ['StandardRPNHead', 'RPN', 'standard_rcnn_rpn']
+__all__ = ['RPNHeadRegistry', 'build_rpn_head', 'RPN']
 """
 Shape shorthand in this module:
 
@@ -47,6 +49,31 @@ Naming convention:
 """
 
 
+class RPNHeadRegistry(Registry):
+    """Registry of rpn heads that predicts objectness and deltas from feature maps.
+
+    The registered object must be a callable that accepts two arguments:
+
+    1. cfg: A :class:`CfgNode`
+    2. input_shape: List of output shape of backbone or neck which contains shape specification
+
+    It will be called with `obj.from_config(cfg, input_shape)` or `obj(cfg, input_shape)`.
+    """
+    pass
+
+
+def build_rpn_head(cfg: CfgNode, input_shape: List[ShapeSpec]) -> nn.Module:
+    """Builds a rpn head from `cfg.MODEL.RPN.HEAD_NAME`."""
+    name = cfg.MODEL.RPN.HEAD_NAME
+    head_cls = RPNHeadRegistry.get(name)
+    if hasattr(head_cls, 'from_config'):
+        head = head_cls.from_config(cfg, input_shape)
+    else:
+        head = head_cls(cfg, input_shape)
+    return head
+
+
+@RPNHeadRegistry.register('StandardRPNHead')
 class StandardRPNHead(nn.Module):
     """Standard RPN classification and regression heads described in :paper:`Faster R-CNN`.
 
@@ -78,6 +105,26 @@ class StandardRPNHead(nn.Module):
         for l in [self.conv, self.objectness_logits, self.anchor_deltas]:
             weight_init.normal_init(l, std=0.01, bias=0)
 
+    @classmethod
+    def from_config(cls, cfg: CfgNode, input_shape: List[ShapeSpec]) -> 'StandardRPNHead':
+        # Standard RPN is shared across levels:
+        in_channels = [x.channels for x in input_shape]
+        assert len(set(in_channels)) == 1, 'Each level must have the same channel!'
+        in_channels = in_channels[0]
+
+        # RPNHead should take the same input as anchor generator
+        # NOTE: it assumes that creating an anchor generator does not have unwanted side effect.
+        anchor_generator = build_anchor_generator(cfg, input_shape)
+        num_anchors = anchor_generator.num_anchors
+        assert len(
+            set(num_anchors)
+        ) == 1, 'Each level must have the same number of anchors per spatial position'
+        num_anchors = num_anchors[0]
+
+        box_dim = anchor_generator.box_dim
+
+        return cls(in_channels=in_channels, num_anchors=num_anchors, box_dim=box_dim)
+
     def forward(
         self, features: List[torch.Tensor]
     ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:  # yapf: disable
@@ -102,6 +149,7 @@ class StandardRPNHead(nn.Module):
         return pred_objectness_logits, pred_anchor_deltas
 
 
+@ProposalGeneratorRegistry.register('RPN')
 class RPN(nn.Module):
     """Region Proposal Network, introduced by :paper:`Faster R-CNN`."""
 
@@ -119,7 +167,9 @@ class RPN(nn.Module):
         post_nms_topk: Tuple[int, int],
         nms_thresh: float = 0.7,
         min_box_size: float = 0.0,
-        loss_weight: float = 1.0,
+        anchor_boundary_thresh: float = -1.0,
+        loss_weight: Union[float, Dict[str, float]] = 1.0,
+        box_reg_loss_type: str = 'smooth_l1',
         smooth_l1_beta: float = 0.0,
     ) -> None:
         """
@@ -142,7 +192,12 @@ class RPN(nn.Module):
             nms_thresh: NMS threshold used to de-duplicate the predicted proposals.
             min_box_size: Remove proposal boxes with any side smaller than this threshold, in the
                 unit of input image pixels.
-            loss_weight: Weight to be multiplied to the loss.
+            anchor_boundary_thresh (float): Legacy option.
+            loss_weight: Weight to be multiplied to the loss. Can be single float for weighting
+                all rpn losses together, or a dict of individual weightings. Valid dict keys are:
+                    "loss_rpn_cls" - applied to classification loss
+                    "loss_rpn_loc" - applied to box regression loss
+            box_reg_loss_type: Loss type to use. Supported losses: "smooth_l1", "giou".
             smooth_l1_beta: Beta parameter for the smooth L1 regression loss. Default to use L1
                 loss.
         """
@@ -160,8 +215,36 @@ class RPN(nn.Module):
         self._post_nms_topk = {True: post_nms_topk[0], False: post_nms_topk[1]}
         self._nms_thresh = nms_thresh
         self._min_box_size = min_box_size
+        self._anchor_boundary_thresh = anchor_boundary_thresh
+        if isinstance(loss_weight, float):
+            loss_weight = {'loss_rpn_cls': loss_weight, 'loss_rpn_loc': loss_weight}
         self._loss_weight = loss_weight
+        self._box_reg_loss_type = box_reg_loss_type
         self._smooth_l1_beta = smooth_l1_beta
+
+    @classmethod
+    def from_config(cls, cfg: CfgNode, input_shape: Dict[str, ShapeSpec]) -> 'RPN':
+        in_features = cfg.MODEL.RPN.IN_FEATURES
+        return cls(
+            in_features=in_features,
+            head=build_rpn_head(cfg, [input_shape[f] for f in in_features]),
+            anchor_generator=build_anchor_generator(cfg, [input_shape[f] for f in in_features]),
+            anchor_matcher=Matcher(cfg.MODEL.RPN.IOU_THRESHOLDS, cfg.MODEL.RPN.IOU_LABELS, True),
+            box2box_transform=Box2BoxTransform(weights=cfg.MODEL.RPN.BBOX_REG_WEIGHTS),
+            batch_size_per_image=cfg.MODEL.RPN.BATCH_SIZE_PER_IMAGE,
+            positive_fraction=cfg.MODEL.RPN.POSITIVE_FRACTION,
+            pre_nms_topk=(cfg.MODEL.RPN.PRE_NMS_TOPK_TRAIN, cfg.MODEL.RPN.PRE_NMS_TOPK_TEST),
+            post_nms_topk=(cfg.MODEL.RPN.POST_NMS_TOPK_TRAIN, cfg.MODEL.RPN.POST_NMS_TOPK_TEST),
+            nms_thresh=cfg.MODEL.RPN.NMS_THRESH,
+            min_box_size=cfg.MODEL.PROPOSAL_GENERATOR.MIN_SIZE,
+            anchor_boundary_thresh=cfg.MODEL.RPN.BOUNDARY_THRESH,
+            loss_weight={
+                'loss_rpn_cls': cfg.MODEL.RPN.LOSS_WEIGHT,
+                'loss_rpn_loc': cfg.MODEL.RPN.BBOX_REG_LOSS_WEIGHT * cfg.MODEL.RPN.LOSS_WEIGHT
+            },
+            box_reg_loss_type=cfg.MODEL.RPN.BBOX_REG_LOSS_TYPE,
+            smooth_l1_beta=cfg.MODEL.RPN.SMOOTH_L1_BETA,
+        )
 
     def _subsample_labels(self, label: torch.Tensor) -> torch.Tensor:
         """Randomly sample a subset of positive and negative examples, and overwrite the label
@@ -215,6 +298,12 @@ class RPN(nn.Module):
             gt_labels_i = gt_labels_i.to(device=gt_boxes_i.device)
             del match_quality_matrix
 
+            if self._anchor_boundary_thresh >= 0:
+                # Discard anchors that go out of the boundaries of the image
+                # NOTE: This is legacy functionality that is turned off by default in Detectron2
+                anchors_inside_image = anchors.inside_box(image_size_i, self.anchor_boundary_thresh)
+                gt_labels_i[~anchors_inside_image] = -1
+
             # A vector of labels (-1, 0, 1) for each anchor
             gt_labels_i = self._subsample_labels(gt_labels_i)
 
@@ -256,21 +345,33 @@ class RPN(nn.Module):
         """
         num_images = len(gt_labels)
         gt_labels = torch.stack(gt_labels)  # (N, sum(Hi*Wi*A))
-        anchors = type(anchors[0]).cat(anchors).tensor  # (sum(Hi*Wi*A), B)
-        gt_anchor_deltas = [self._box2box_transform.get_deltas(anchors, k) for k in gt_boxes]
-        gt_anchor_deltas = torch.stack(gt_anchor_deltas)  # (N, sum(Hi*Wi*A), B)
 
         # Log the number of positive/negative anchors per-image that's used in training
         pos_mask = gt_labels == 1
         # num_pos_anchors = pos_mask.sum().item()
         # num_neg_anchors = (gt_labels == 0).sum().item()
 
-        localization_loss = smooth_l1_loss(
-            cat(pred_anchor_deltas, dim=1)[pos_mask],
-            gt_anchor_deltas[pos_mask],
-            self._smooth_l1_beta,
-            reduction='sum',
-        )
+        if self._box_reg_loss_type == 'smooth_l1':
+            anchors = type(anchors[0]).cat(anchors).tensor  # Ax(4 or 5)
+            gt_anchor_deltas = [self.box2box_transform.get_deltas(anchors, k) for k in gt_boxes]
+            gt_anchor_deltas = torch.stack(gt_anchor_deltas)  # (N, sum(Hi*Wi*Ai), 4 or 5)
+            localization_loss = smooth_l1_loss(
+                cat(pred_anchor_deltas, dim=1)[pos_mask],
+                gt_anchor_deltas[pos_mask],
+                self.smooth_l1_beta,
+                reduction='sum',
+            )
+        elif self.box_reg_loss_type == 'giou':
+            pred_proposals = self._decode_proposals(anchors, pred_anchor_deltas)
+            pred_proposals = cat(pred_proposals, dim=1)
+            pred_proposals = pred_proposals.view(-1, pred_proposals.shape[-1])
+            pos_mask = pos_mask.view(-1)
+            localization_loss = giou_loss(
+                pred_proposals[pos_mask], cat(gt_boxes)[pos_mask], reduction='sum'
+            )
+        else:
+            raise ValueError(f"Invalid rpn box reg loss type '{self._box_reg_loss_type}'")
+
         valid_mask = gt_labels >= 0
         objectness_loss = F.binary_cross_entropy_with_logits(
             cat(pred_objectness_logits, dim=1)[valid_mask],
@@ -384,93 +485,3 @@ class RPN(nn.Module):
             # Append feature map proposals with shape (N, Hi*Wi*A, B)
             proposals.append(proposals_i.view(N, -1, B))
         return proposals
-
-
-"""
-Wrappers of RPN
-"""
-
-
-# TODO: add from_config as class method. When building objects, if the object has attribute
-#   from_config, we call obj.from_config(input_shape, **cfg), otherwise obj(input_shape, **cfg)
-@ProposalGeneratorRegistry.register('Standard_RCNN_RPN')
-def standard_rcnn_rpn(
-    input_shape: Dict[str, ShapeSpec],
-    *,
-    in_features: List[str] = ('res4',),
-    # anchor generator
-    sizes: Union[List[float], List[List[float]]] = ((32, 64, 128, 256, 512),),
-    aspect_ratios: Union[List[float], List[List[float]]] = ((0.5, 1.0, 2.0),),
-    offset: float = 0.0,
-    # Matcher
-    thresholds: List[float] = (0.3, 0.7),
-    labels: List[int] = (0, -1, 1),
-    # Box2BoxTransform
-    bbox_reg_weights: Tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0),
-    # RPN
-    batch_size_per_image: int = 256,
-    positive_fraction: float = 0.5,
-    pre_nms_topk: Tuple[int, int] = (12000, 6000),
-    post_nms_topk: Tuple[int, int] = (2000, 1000),
-    nms_thresh: float = 0.7,
-    min_box_size: float = 0.0,
-    loss_weight: float = 1.0,
-    smooth_l1_beta: float = 0.0,
-) -> RPN:
-    """
-    Args:
-        input_shape: Output shape of backbone or neck.
-        in_features: See :class:`RPN`.
-        sizes: See :class:`DefaultAnchorGenerator`.
-        aspect_ratios: See :class:`DefaultAnchorGenerator`.
-        offset: See :class:`DefaultAnchorGenerator`.
-        thresholds: See :class:`Matcher`.
-        labels: See :class:`Matcher`.
-        bbox_reg_weights: See :class:`Box2BoxTransform`.
-        batch_size_per_image: See :class:`RPN`.
-        positive_fraction: See :class:`RPN`.
-        pre_nms_topk: See :class:`RPN`.
-        post_nms_topk: See :class:`RPN`.
-        nms_thresh: See :class:`RPN`.
-        min_box_size: See :class:`RPN`.
-        loss_weight: See :class:`RPN`.
-        smooth_l1_beta: See :class:`RPN`.
-    """
-    input_shape = [input_shape[f] for f in in_features]
-
-    strides = [s.stride for s in input_shape]
-    anchor_generator = DefaultAnchorGenerator(sizes, aspect_ratios, strides, offset)
-
-    # Standard RPN is shared across levels:
-    in_channels = [s.channels for s in input_shape]
-    assert len(set(in_channels)) == 1, 'Each level must have the same channel!'
-    in_channels = in_channels[0]
-
-    num_anchors = anchor_generator.num_anchors
-    assert len(
-        set(num_anchors)
-    ) == 1, 'Each level must have the same number of anchors per spatial position'
-    num_anchors = num_anchors[0]
-
-    box_dim = anchor_generator.box_dim
-    head = StandardRPNHead(in_channels=in_channels, num_anchors=num_anchors, box_dim=box_dim)
-
-    anchor_matcher = Matcher(list(thresholds), list(labels), allow_low_quality_matches=True)
-
-    box2box_transform = Box2BoxTransform(bbox_reg_weights)
-
-    return RPN(
-        in_features=in_features,
-        head=head,
-        anchor_generator=anchor_generator,
-        anchor_matcher=anchor_matcher,
-        box2box_transform=box2box_transform,
-        batch_size_per_image=batch_size_per_image,
-        positive_fraction=positive_fraction,
-        pre_nms_topk=pre_nms_topk,
-        post_nms_topk=post_nms_topk,
-        nms_thresh=nms_thresh,
-        min_box_size=min_box_size,
-        loss_weight=loss_weight,
-        smooth_l1_beta=smooth_l1_beta,
-    )

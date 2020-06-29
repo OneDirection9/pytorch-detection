@@ -221,7 +221,6 @@ class FPN(Neck):
     def from_config(cls, cfg: CfgNode, input_shape: Dict[str, ShapeSpec]) -> 'FPN':
         """Returns an instance of :class:`FPN` neck without top_block."""
         in_features = cfg.MODEL.FPN.IN_FEATURES
-        out_channels = cfg.MODEL.FPN.OUT_CHANNELS
         in_channels = [input_shape[f].channels for f in in_features]
         in_strides = [input_shape[f].stride for f in in_features]
 
@@ -229,7 +228,7 @@ class FPN(Neck):
             in_channels=in_channels,
             in_strides=in_strides,
             in_features=in_features,
-            out_channels=out_channels,
+            out_channels=cfg.MODEL.FPN.OUT_CHANNELS,
             norm=cfg.MODEL.FPN.NORM,
             fuse_type=cfg.MODEL.FPN.FUSE_TYPE,
         )

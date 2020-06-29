@@ -25,7 +25,7 @@ class AnchorGeneratorRegistry(Registry):
     The registered object must be a callable that accepts two arguments:
 
     1. cfg: A :class:`CfgNode`
-    2. input_shape: List of output shape of backbones or necks which contains shape specification
+    2. input_shape: List of output shape of backbone or neck which contains shape specification
 
     It will be called with `obj.from_config(cfg, input_shape)` or `obj(cfg, input_shape)`.
     """
