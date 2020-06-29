@@ -4,37 +4,78 @@
 from __future__ import absolute_import, division, print_function
 
 import math
-from typing import Iterator, List, Optional, Tuple, Union
+from typing import Iterator, List, Tuple, Union
 
 import torch
+from foundation.registry import Registry
 from torch import nn
 
+from det.config import CfgNode
+from det.layers import ShapeSpec
 from det.structures import Boxes, RotatedBoxes
 
-__all__ = ['BufferList', 'DefaultAnchorGenerator', 'RotatedAnchorGenerator']
+__all__ = ['AnchorGeneratorRegistry', 'build_anchor_generator']
 
 _T = Union[List[float], List[List[float]]]
+
+
+class AnchorGeneratorRegistry(Registry):
+    """Registry of modules that creates object detection anchors for feature maps.
+
+    The registered object must be a callable that accepts two arguments:
+
+    1. cfg: A :class:`CfgNode`
+    2. input_shape: List of output shape of backbones or necks which contains shape specification
+
+    It will be called with `obj.from_config(cfg, input_shape)` or `obj(cfg, input_shape)`.
+    """
+    pass
+
+
+def build_anchor_generator(cfg: CfgNode, input_shape: List[ShapeSpec]) -> nn.Module:
+    """Builds an anchor generator from `cfg.MODEL.ANCHOR_GENERATOR.NAME`."""
+    anchor_generator_name = cfg.MODEL.ANCHOR_GENERATOR.NAME
+    anchor_generator_cls = AnchorGeneratorRegistry.get(anchor_generator_name)
+    if hasattr(anchor_generator_cls, 'from_config'):
+        anchor_generator = anchor_generator_cls.from_config(cfg, input_shape)
+    else:
+        anchor_generator = anchor_generator_cls(cfg, input_shape)
+    return anchor_generator
 
 
 class BufferList(nn.Module):
     """The same as nn.ParameterList, but for buffers."""
 
-    def __init__(self, buffers: Optional[List[torch.Tensor]] = None) -> None:
+    def __init__(self, buffers: List[torch.Tensor]) -> None:
         super(BufferList, self).__init__()
-        if buffers is not None:
-            self.extend(buffers)
-
-    def extend(self, buffers: List[torch.Tensor]) -> 'BufferList':
-        offset = len(self)
         for i, buffer in enumerate(buffers):
-            self.register_buffer(str(offset + i), buffer)
-        return self
+            self.register_buffer(str(i), buffer)
 
     def __len__(self) -> int:
         return len(self._buffers)
 
     def __iter__(self) -> Iterator[torch.Tensor]:
         return iter(self._buffers.values())
+
+
+def _create_grid_offsets(
+    size: Tuple[int, int],
+    stride: int,
+    offset: float,
+    device: torch.device,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    grid_height, grid_width = size
+    shifts_x = torch.arange(
+        offset * stride, grid_width * stride, step=stride, dtype=torch.float32, device=device
+    )
+    shifts_y = torch.arange(
+        offset * stride, grid_height * stride, step=stride, dtype=torch.float32, device=device
+    )
+
+    shift_y, shift_x = torch.meshgrid(shifts_y, shifts_x)
+    shift_x = shift_x.reshape(-1)
+    shift_y = shift_y.reshape(-1)
+    return shift_x, shift_y
 
 
 def _broadcast_params(params: _T, num_features: int, name: str) -> List[List[float]]:
@@ -63,26 +104,7 @@ def _broadcast_params(params: _T, num_features: int, name: str) -> List[List[flo
     return params
 
 
-def _create_grid_offsets(
-    size: Tuple[int, int],
-    stride: int,
-    offset: float,
-    device: torch.device,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    grid_height, grid_width = size
-    shifts_x = torch.arange(
-        offset * stride, grid_width * stride, step=stride, dtype=torch.float32, device=device
-    )
-    shifts_y = torch.arange(
-        offset * stride, grid_height * stride, step=stride, dtype=torch.float32, device=device
-    )
-
-    shift_y, shift_x = torch.meshgrid(shifts_y, shifts_x)
-    shift_x = shift_x.reshape(-1)
-    shift_y = shift_y.reshape(-1)
-    return shift_x, shift_y
-
-
+@AnchorGeneratorRegistry.register('DefaultAnchorGenerator')
 class DefaultAnchorGenerator(nn.Module):
     """Computes anchors in the standard ways described in
     `Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks`_.
@@ -121,6 +143,15 @@ class DefaultAnchorGenerator(nn.Module):
         sizes = _broadcast_params(sizes, num_features, 'sizes')
         aspect_ratios = _broadcast_params(aspect_ratios, num_features, 'aspect_ratios')
         self.cell_anchors = self._calculate_anchors(sizes, aspect_ratios)
+
+    @classmethod
+    def from_config(cls, cfg: CfgNode, input_shape: List[ShapeSpec]):
+        return cls(
+            sizes=cfg.MODEL.ANCHOR_GENERATOR.SIZES,
+            aspect_ratios=cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS,
+            strides=[x.stride for x in input_shape],
+            offset=cfg.MODEL.ANCHOR_GENERATOR.OFFSET,
+        )
 
     @property
     def num_cell_anchors(self) -> List[int]:
@@ -214,6 +245,7 @@ class DefaultAnchorGenerator(nn.Module):
         return [Boxes(x) for x in anchors_over_all_feature_maps]
 
 
+@AnchorGeneratorRegistry.register('RotatedAnchorGenerator')
 class RotatedAnchorGenerator(nn.Module):
     """Computes rotated anchors used by Rotated RPN (RRPN), described in
     "Arbitrary-Oriented Scene Text Detection via Rotation Proposals".
@@ -257,6 +289,16 @@ class RotatedAnchorGenerator(nn.Module):
         aspect_ratios = _broadcast_params(aspect_ratios, num_features, 'aspect_ratios')
         angles = _broadcast_params(angles, num_features, 'angles')
         self.cell_anchors = self._calculate_anchors(sizes, aspect_ratios, angles)
+
+    @classmethod
+    def from_config(cls, cfg: CfgNode, input_shape: List[ShapeSpec]):
+        return cls(
+            sizes=cfg.MODEL.ANCHOR_GENERATOR.SIZES,
+            aspect_ratios=cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS,
+            angles=cfg.MODEL.ANCHOR_GENERATOR.ANGLES,
+            strides=[x.stride for x in input_shape],
+            offset=cfg.MODEL.ANCHOR_GENERATOR.OFFSET,
+        )
 
     @property
     def num_cell_anchors(self) -> List[int]:

@@ -14,7 +14,15 @@ Neck = BaseModule
 
 
 class NeckRegistry(Registry):
-    """Registry of necks."""
+    """Registry of necks, which enhance the features extracted by backbones.
+
+    The registered object must be a callable that accepts two arguments:
+
+    1. cfg: A :class:`CfgNode`
+    2. input_shape: The output shape of backbone mapping from name to shape specification
+
+    It will be called with `obj.from_config(cfg, input_shape)` or `obj(cfg, input_shape)`.
+    """
     pass
 
 

@@ -14,7 +14,15 @@ Backbone = BaseModule
 
 
 class BackboneRegistry(Registry):
-    """Registry of backbones."""
+    """Registry of backbones, which extract feature maps from images.
+
+    The registered object must be a callable that accepts two arguments:
+
+    1. cfg: A :class:`CfgNode`
+    2. input_shape: A :class:`ShapeSpec`, which contains the input shape specification.
+
+    It will be called with `obj.from_config(cfg, input_shape)` or `obj(cfg, input_shape)`.
+    """
     pass
 
 

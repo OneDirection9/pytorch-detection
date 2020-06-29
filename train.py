@@ -9,6 +9,7 @@ from foundation.common.log import configure_logging
 from det.config import get_cfg
 from det.data.build import build_detection_train_loader
 from det.engine.launch import launch
+from det.models.anchor_generator import build_anchor_generator
 from det.models.backbones import build_backbone
 from det.models.necks import build_neck
 from det.utils import comm, env
@@ -91,17 +92,25 @@ def main(args):
     backbone = build_backbone(cfg)
     print(backbone.output_shape)
 
-    cfg.merge_from_list(['NECK.NAME', 'FPN'])
+    cfg.merge_from_list(['MODEL.NECK.NAME', 'FPN'])
     neck = build_neck(cfg, backbone.output_shape)
     print(neck.output_shape)
 
-    cfg.merge_from_list(['NECK.NAME', 'RCNN_FPN_Neck'])
+    cfg.merge_from_list(['MODEL.NECK.NAME', 'RCNNFPNNeck'])
     neck = build_neck(cfg, backbone.output_shape)
     print(neck.output_shape)
 
-    cfg.merge_from_list(['NECK.NAME', 'RetinaNet_FPN_Neck'])
+    cfg.merge_from_list(['MODEL.NECK.NAME', 'RetinaNetFPNNeck'])
     neck = build_neck(cfg, backbone.output_shape)
     print(neck.output_shape)
+
+    cfg.merge_from_list(['MODEL.ANCHOR_GENERATOR.NAME', 'DefaultAnchorGenerator'])
+    ag = build_anchor_generator(cfg, list(neck.output_shape.values()))
+    print(ag.num_anchors)
+
+    cfg.merge_from_list(['MODEL.ANCHOR_GENERATOR.NAME', 'RotatedAnchorGenerator'])
+    ag = build_anchor_generator(cfg, list(neck.output_shape.values()))
+    print(ag.num_anchors)
 
 
 if __name__ == '__main__':

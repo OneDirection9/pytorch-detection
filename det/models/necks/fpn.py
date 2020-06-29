@@ -277,7 +277,7 @@ def _assert_strides_are_log2_contiguous(strides: List[int]) -> None:
             raise ValueError('Strides {} {} are not log2 contiguous'.format(stride, strides[i - 1]))
 
 
-@NeckRegistry.register('RCNN_FPN_Neck')
+@NeckRegistry.register('RCNNFPNNeck')
 class RCNNFPNNeck(FPN):
 
     @classmethod
@@ -301,7 +301,7 @@ class RCNNFPNNeck(FPN):
         )
 
 
-@NeckRegistry.register('RetinaNet_FPN_Neck')
+@NeckRegistry.register('RetinaNetFPNNeck')
 class RetinaNetFPNNeck(FPN):
 
     @classmethod
