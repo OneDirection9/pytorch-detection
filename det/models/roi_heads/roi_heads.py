@@ -3,12 +3,42 @@ from __future__ import absolute_import, division, print_function
 from typing import Dict, List, Optional, Tuple
 
 import torch
+from foundation.registry import Registry
 from torch import nn
 
+from det.config import CfgNode
+from det.layers import ShapeSpec
 from det.structures import Boxes, ImageList, Instances, pairwise_iou
 from ..matcher import Matcher
 from ..proposal_generator.utils import add_ground_truth_to_proposals
 from ..sampling import subsample_labels
+
+__all__ = ['ROIHeadsRegistry', 'build_roi_heads', 'ROIHeads']
+
+
+class ROIHeadsRegistry(Registry):
+    """Registry of ROI heads in a generalized R-CNN model.
+
+    ROIHeads take feature maps and region proposals, and perform per-region computation.
+    The registered object must be a callable that accepts two arguments:
+
+    1. cfg: A :class:`CfgNode`
+    2. input_shape: The output shape of backbone or neck mapping from name to shape specification
+
+    It will be called with `obj.from_config(cfg, input_shape)` or `obj(cfg, input_shape)`.
+    """
+    pass
+
+
+def build_roi_heads(cfg: CfgNode, input_shape: Dict[str, ShapeSpec]):
+    """Builds a ROIHeads from `cfg.MODEL.ROI_HEADS.NAME`."""
+    roi_heads_name = cfg.MODEL.ROI_HEADS.NAME
+    roi_heads_cls = ROIHeadsRegistry.get(roi_heads_name)
+    if hasattr(roi_heads_cls, 'from_config'):
+        roi_heads = roi_heads_cls.from_config(cfg, input_shape)
+    else:
+        roi_heads = roi_heads_cls(cfg, input_shape)
+    return roi_heads
 
 
 class ROIHeads(nn.Module):
@@ -48,6 +78,20 @@ class ROIHeads(nn.Module):
         self._positive_fraction = positive_fraction
         self._proposal_matcher = proposal_matcher
         self._proposal_append_gt = proposal_append_gt
+
+    @classmethod
+    def from_config(cls, cfg: CfgNode) -> 'ROIHeads':
+        return cls(
+            num_classes=cfg.MODEL.ROI_HEADS.NUM_CLASSES,
+            batch_size_per_image=cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE,
+            positive_fraction=cfg.MODEL.ROI_HEADS.POSITIVE_FRACTION,
+            proposal_matcher=Matcher(
+                cfg.MODEL.ROI_HEADS.IOU_THRESHOLDS,
+                cfg.MODEL.ROI_HEADS.IOU_LABELS,
+                allow_low_quality_matches=False,
+            ),
+            proposal_append_gt=cfg.MODEL.ROI_HEADS.PROPOSAL_APPEND_GT,
+        )
 
     def _sample_proposals(
         self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor
@@ -206,3 +250,4 @@ class Res5ROIHeads(ROIHeads):
     """The ROIHeads in a typical "C4" R-CNN model, where the box and mask head share the cropping
     and the per-region feature computation by a Res5 block.
     """
+    pass

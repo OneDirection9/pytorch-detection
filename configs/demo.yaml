@@ -3,3 +3,9 @@ DATASETS:
     - name: COCOPerson
       json_file: ./data/MSCOCO/annotations/person_keypoints_train2017.json
       image_root: ./data/MSCOCO/train2017/
+  TEST:
+    - name: COCO
+
+#MODEL:
+#  RESNETS:
+#    OUT_FEATURES: (

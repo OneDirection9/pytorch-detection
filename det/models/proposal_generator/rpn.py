@@ -64,13 +64,13 @@ class RPNHeadRegistry(Registry):
 
 def build_rpn_head(cfg: CfgNode, input_shape: List[ShapeSpec]) -> nn.Module:
     """Builds a rpn head from `cfg.MODEL.RPN.HEAD_NAME`."""
-    name = cfg.MODEL.RPN.HEAD_NAME
-    head_cls = RPNHeadRegistry.get(name)
-    if hasattr(head_cls, 'from_config'):
-        head = head_cls.from_config(cfg, input_shape)
+    rpn_head_name = cfg.MODEL.RPN.HEAD_NAME
+    rpn_head_cls = RPNHeadRegistry.get(rpn_head_name)
+    if hasattr(rpn_head_cls, 'from_config'):
+        rpn_head = rpn_head_cls.from_config(cfg, input_shape)
     else:
-        head = head_cls(cfg, input_shape)
-    return head
+        rpn_head = rpn_head_cls(cfg, input_shape)
+    return rpn_head
 
 
 @RPNHeadRegistry.register('StandardRPNHead')
@@ -229,7 +229,11 @@ class RPN(nn.Module):
             in_features=in_features,
             head=build_rpn_head(cfg, [input_shape[f] for f in in_features]),
             anchor_generator=build_anchor_generator(cfg, [input_shape[f] for f in in_features]),
-            anchor_matcher=Matcher(cfg.MODEL.RPN.IOU_THRESHOLDS, cfg.MODEL.RPN.IOU_LABELS, True),
+            anchor_matcher=Matcher(
+                cfg.MODEL.RPN.IOU_THRESHOLDS,
+                cfg.MODEL.RPN.IOU_LABELS,
+                allow_low_quality_matches=True,
+            ),
             box2box_transform=Box2BoxTransform(weights=cfg.MODEL.RPN.BBOX_REG_WEIGHTS),
             batch_size_per_image=cfg.MODEL.RPN.BATCH_SIZE_PER_IMAGE,
             positive_fraction=cfg.MODEL.RPN.POSITIVE_FRACTION,
