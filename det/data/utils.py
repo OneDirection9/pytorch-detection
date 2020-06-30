@@ -18,6 +18,7 @@ from det.structures import (
     Instances,
     Keypoints,
     PolygonMasks,
+    RotatedBoxes,
     polygons_to_bitmask,
 )
 from . import transforms as T
@@ -31,6 +32,7 @@ __all__ = [
     'transform_instance_annotations',
     'gen_crop_transform_with_instance',
     'annotations_to_instances',
+    'annotations_to_instances_rotated',
     'filter_empty_instances',
     'check_metadata_consistency',
     'create_keypoint_hflip_indices',
@@ -230,23 +232,15 @@ def transform_instance_annotations(
             ]
         elif isinstance(segm, dict):
             # RLE
-            if isinstance(segm['counts'], list):
-                # Uncompressed RLE -> encoded RLE
-                segm = mask_util.frPyObjects(segm, segm['size'][0], segm['size'][1])
             mask = mask_util.decode(segm)
             mask = transforms.apply_segmentation(mask)
-            assert tuple(mask.shape[:2]) == image_size
-            annotation['segmentation'] = mask
-        elif isinstance(segm, np.ndarray):
-            # masks
-            mask = transforms.apply_segmentation(segm)
             assert tuple(mask.shape[:2]) == image_size
             annotation['segmentation'] = mask
         else:
             raise TypeError(
                 "Cannot transform segmentation of type '{}'!"
                 'Supported types are: polygons as list[list[float] or ndarray],'
-                ' COCO-style RLE as a dict, 2D ndarray.'.format(type(segm))
+                ' COCO-style RLE as a dict.'.format(type(segm))
             )
 
     if 'keypoints' in annotation:
@@ -329,6 +323,7 @@ def annotations_to_instances(
                         ' COCO-style RLE as a dict, or a full-image segmentation mask '
                         'as a 2D ndarray.'.format(type(segm))
                     )
+            # torch.from_numpy does not support array with negative stride.
             masks = BitMasks(
                 torch.stack([torch.from_numpy(np.ascontiguousarray(x)) for x in masks])
             )
@@ -339,6 +334,36 @@ def annotations_to_instances(
 
     if len(anns) and 'keypoints' in anns[0]:
         target.gt_keypoints = Keypoints([obj.get('keypoints', []) for obj in anns])
+
+    return target
+
+
+def annotations_to_instances_rotated(
+    anns: List[Dict[str, Any]], image_size: Tuple[int, int]
+) -> Instances:
+    """Creates an :class:`Instances` object used by the models,
+    from instance annotations in the dataset dict.
+
+    Compared to `annotations_to_instances`, this function is for rotated boxes only.
+
+    Args:
+        anns: A list of instance annotations in one image, each element for one instance.
+        image_size: height, width
+
+    Returns:
+        Instances:
+            Containing fields "gt_boxes", "gt_classes",
+            if they can be obtained from `anns`.
+            This is the format that builtin models expect.
+    """
+    boxes = [obj['bbox'] for obj in anns]
+    target = Instances(image_size)
+    boxes = target.gt_boxes = RotatedBoxes(boxes)
+    boxes.clip(image_size)
+
+    classes = [obj['category_id'] for obj in anns]
+    classes = torch.tensor(classes, dtype=torch.int64)
+    target.gt_classes = classes
 
     return target
 

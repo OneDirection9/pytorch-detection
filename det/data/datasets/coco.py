@@ -10,6 +10,7 @@ import os.path as osp
 from typing import Any, Dict, List, Optional
 
 from foundation.common.timer import Timer
+from pycocotools import mask as mask_util
 from pycocotools.coco import COCO
 
 from det.structures import BoxMode
@@ -154,7 +155,11 @@ class COCODataset(VisionDataset):
 
                 segm = ann.get('segmentation', None)
                 if segm:  # either list[list[float]] or dict(RLE)
-                    if not isinstance(segm, dict):
+                    if isinstance(segm, dict):
+                        if isinstance(segm['counts'], list):
+                            # convert to compressed RLE
+                            segm = mask_util.frPyObjects(segm, *segm['size'])
+                    else:
                         # filter out invalid polygons (< 3 points)
                         segm = [poly for poly in segm if len(poly) % 2 == 0 and len(poly) >= 6]
                         if len(segm) == 0:
