@@ -10,8 +10,10 @@ import numpy as np
 import torch
 from foundation.transforms import (
     CV2_INTER_CODES,
+    CropTransform,
     HFlipTransform,
     Transform,
+    TransformList,
     is_numpy,
     is_numpy_coords,
     is_numpy_image,
@@ -19,7 +21,7 @@ from foundation.transforms import (
 from PIL import Image
 from torch.nn import functional as F
 
-__all__ = ['ExtentTransform', 'RotationTransform']
+__all__ = ['ExtentTransform', 'ResizeTransform2', 'RotationTransform']
 
 PIL_INTER_CODES = {
     'nearest': Image.NEAREST,
@@ -94,6 +96,65 @@ class ExtentTransform(Transform):
 
     def apply_segmentation(self, segmentation: np.ndarray) -> np.ndarray:
         return self.apply_image(segmentation, interp='nearest')
+
+
+class ResizeTransform2(Transform):
+    """Resizing the image to a target size."""
+
+    def __init__(self, h: int, w: int, new_h: int, new_w: int, interp: str = 'bilinear') -> None:
+        """
+        Args:
+            h: Original image height.
+            w: Original image width.
+            new_h: New image height.
+            new_w: New image width.
+            interp: PIL interpolation methods. See :const:`PIL_INTER_CODES` for all options.
+        """
+        # TODO decide on PIL vs opencv
+        self.h = h
+        self.w = w
+        self.new_h = new_h
+        self.new_w = new_w
+        self.interp = interp
+
+    def apply_image(self, image: np.ndarray, interp: Optional[str] = None) -> np.ndarray:
+        if not is_numpy(image):
+            raise TypeError('image should be np.ndarray. Got {}'.format(type(image)))
+        if not is_numpy_image(image):
+            raise ValueError('image should be 2D/3D. Got {}D'.format(image.ndim))
+
+        assert image.shape[:2] == (self.h, self.w)
+
+        if image.dtype == np.uint8:
+            pil_image = Image.fromarray(image)
+            interp_method = interp if interp is not None else self.interp
+            pil_image = pil_image.resize((self.new_w, self.new_h), PIL_INTER_CODES[interp_method])
+            ret = np.asarray(pil_image)
+        else:
+            mode = self.interp
+            assert mode in {'bilinear', 'bicubic'}
+            # PIL only supports uint8
+            image = torch.from_numpy(image)
+            shape = list(image.shape)
+            shape_4d = shape[:2] + [1] * (4 - len(shape)) + shape[2:]
+            image = image.view(shape_4d).permute(2, 3, 0, 1)  # hw(c) -> nchw
+            image = F.interpolate(image, (self.new_h, self.new_w), mode=mode, align_corners=False)
+            shape[:2] = (self.new_h, self.new_w)
+            ret = image.permute(2, 3, 0, 1).view(shape).numpy()  # nchw -> hw(c)
+
+        return ret
+
+    def apply_coords(self, coords):
+        coords[:, 0] = coords[:, 0] * (self.new_w * 1.0 / self.w)
+        coords[:, 1] = coords[:, 1] * (self.new_h * 1.0 / self.h)
+        return coords
+
+    def apply_segmentation(self, segmentation):
+        segmentation = self.apply_image(segmentation, interp=Image.NEAREST)
+        return segmentation
+
+    def inverse(self):
+        return ResizeTransform2(self.new_h, self.new_w, self.h, self.w, self.interp)
 
 
 class RotationTransform(Transform):
@@ -194,63 +255,17 @@ class RotationTransform(Transform):
             rm[:, 2] += new_center
         return rm
 
-
-class ResizeTransform2(Transform):
-    """
-    Resize the image to a target size.
-    """
-
-    def __init__(self, h, w, new_h, new_w, interp=None):
-        """
-        Args:
-            h, w (int): original image size
-            new_h, new_w (int): new image size
-            interp: PIL interpolation methods, defaults to bilinear.
-        """
-        # TODO decide on PIL vs opencv
-        super().__init__()
-        if interp is None:
-            interp = Image.BILINEAR
-        self.h = h
-        self.w = w
-        self.new_h = new_h
-        self.new_w = new_w
-        self.interp = interp
-
-    def apply_image(self, img, interp=None):
-        assert img.shape[:2] == (self.h, self.w)
-        assert len(img.shape) <= 4
-
-        if img.dtype == np.uint8:
-            pil_image = Image.fromarray(img)
-            interp_method = interp if interp is not None else self.interp
-            pil_image = pil_image.resize((self.new_w, self.new_h), interp_method)
-            ret = np.asarray(pil_image)
-        else:
-            # PIL only supports uint8
-            img = torch.from_numpy(img)
-            shape = list(img.shape)
-            shape_4d = shape[:2] + [1] * (4 - len(shape)) + shape[2:]
-            img = img.view(shape_4d).permute(2, 3, 0, 1)  # hw(c) -> nchw
-            _PIL_RESIZE_TO_INTERPOLATE_MODE = {Image.BILINEAR: 'bilinear', Image.BICUBIC: 'bicubic'}
-            mode = _PIL_RESIZE_TO_INTERPOLATE_MODE[self.interp]
-            img = F.interpolate(img, (self.new_h, self.new_w), mode=mode, align_corners=False)
-            shape[:2] = (self.new_h, self.new_w)
-            ret = img.permute(2, 3, 0, 1).view(shape).numpy()  # nchw -> hw(c)
-
-        return ret
-
-    def apply_coords(self, coords):
-        coords[:, 0] = coords[:, 0] * (self.new_w * 1.0 / self.w)
-        coords[:, 1] = coords[:, 1] * (self.new_h * 1.0 / self.h)
-        return coords
-
-    def apply_segmentation(self, segmentation):
-        segmentation = self.apply_image(segmentation, interp=Image.NEAREST)
-        return segmentation
-
     def inverse(self):
-        return ResizeTransform2(self.new_h, self.new_w, self.h, self.w, self.interp)
+        """The inverse is to rotate it back with expand, and crop to get the original shape."""
+        if not self.expand:  # Not possible to inverse if a part of the image is lost
+            raise NotImplementedError()
+        rotation = RotationTransform(
+            self.bound_h, self.bound_w, -self.angle, True, None, self.interp
+        )
+        crop = CropTransform(
+            (rotation.bound_w - self.w) // 2, (rotation.bound_h - self.h) // 2, self.w, self.h
+        )
+        return TransformList([rotation, crop])
 
 
 def HFlip_rotated_box(transform: HFlipTransform, rotated_boxes: np.ndarray) -> np.ndarray:

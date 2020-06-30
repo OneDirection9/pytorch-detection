@@ -15,7 +15,6 @@ from foundation.transforms import (
     Transform,
     VFlipTransform,
 )
-from PIL import Image
 
 from .augmentation import Augmentation
 from .transform import ExtentTransform, ResizeTransform2, RotationTransform
@@ -58,6 +57,8 @@ class RandomApply(Augmentation):
 
         self.transform = transform
         self.prob = prob
+        if isinstance(transform, Augmentation):
+            self.input_args = transform.input_args
 
     def get_transform(self, image: np.ndarray) -> Transform:
         do = self._rand_range() < self.prob
@@ -119,13 +120,13 @@ class RandomVFlip(Augmentation):
 
 
 class Resize(Augmentation):
-    """Resizing image to a target size."""
+    """Resizing image to a fixed target size."""
 
-    def __init__(self, shape: Union[Tuple[int, int], int], interp: int = Image.BILINEAR) -> None:
+    def __init__(self, shape: Union[Tuple[int, int], int], interp: str = 'bilinear') -> None:
         """
         Args:
             shape: (H, W) tuple or a int.
-            interp: The interpolation method. See :const:`INTERP_CODES` in :module:`foundation`.
+            interp: PIL interpolation method. See :const:`PIL_INTER_CODES` for all options.
         """
         super(Resize, self).__init__()
 
@@ -151,7 +152,7 @@ class ResizeShortestEdge(Augmentation):
         short: Union[List[int], int],
         max_size: int = sys.maxsize,
         sample_style: str = 'range',
-        interp: int = Image.BILINEAR
+        interp: str = 'bilinear',
     ) -> None:
         """
         Args:
@@ -160,7 +161,7 @@ class ResizeShortestEdge(Augmentation):
                 to sample from.
             max_size: Maximum allowed longest edge length.
             sample_style: Either 'range' or 'choice'.
-            interp: The interpolation method. See :const:`INTERP_CODES` in :module:`foundation`.
+            interp: PIL interpolation method. See :const:`PIL_INTER_CODES` for all options.
         """
         super(ResizeShortestEdge, self).__init__()
 
@@ -177,7 +178,6 @@ class ResizeShortestEdge(Augmentation):
 
     def get_transform(self, image: np.ndarray) -> Transform:
         h, w = image.shape[:2]
-
         if self.sample_style == 'range':
             size = np.random.randint(self.short[0], self.short[1] + 1)
         else:
@@ -195,6 +195,73 @@ class ResizeShortestEdge(Augmentation):
         new_w = int(new_w + 0.5)
         new_h = int(new_h + 0.5)
         return ResizeTransform2(h, w, new_h, new_w, interp=self.interp)
+
+
+class RandomRotation(Augmentation):
+    """Rotating the image a few random degrees counter clockwise around the given center."""
+
+    def __init__(
+        self,
+        angle: Union[List[float], float],
+        expand: bool = True,
+        center: Optional[List[Tuple[float, float]]] = None,
+        sample_style: str = 'range',
+        interp: str = 'bilinear'
+    ) -> None:
+        """
+        Args:
+            angle: If `sample_style=='range'`, a [min, max] interval from which to sample the angle
+                (in degrees). If `sample_style=='choice'`, a list of angles to sample from.
+            expand: Choose if the image should be resized to fit the whole rotated image (default),
+                or simply cropped
+            center: If `sample_style=='range'`, a [[minx, miny], [maxx, maxy]] relative interval
+                from which to sample the center, [0, 0] being the top left of the image and [1, 1]
+                the bottom right. If `sample_style=='choice'`, a list of centers to sample from
+                Default: None, which means that the center of rotation is the center of the image
+                center has no effect if expand=True because it only affects shifting.
+            sample_style: Either 'range' or 'choice'.
+            interp: cv2 interpolation method. See :const:`CV2_INTER_CODES` for all options.
+        """
+        super(RandomRotation, self).__init__()
+
+        if sample_style not in ['range', 'choice']:
+            raise ValueError('sample_type should be range or choice. Got {}'.format(sample_style))
+        if center is not None and (np.max(center) > 1.0 or np.min(center) < 0.0):
+            raise ValueError('center should have value in range [0.0, 1.0].')
+
+        if isinstance(angle, (float, int)):
+            angle = (angle, angle)
+        if center is not None and isinstance(center[0], (float, int)):
+            center = (center, center)
+
+        self.angle = angle
+        self.expand = expand
+        self.center = center
+        self.sample_style = sample_style
+        self.interp = interp
+
+    def get_transform(self, image: np.ndarray) -> Transform:
+        h, w = image.shape[:2]
+        center = None
+        if self.sample_style == 'range':
+            angle = np.random.uniform(self.angle[0], self.angle[1])
+            if self.center is not None:
+                center = (
+                    np.random.uniform(self.center[0][0], self.center[1][0]),
+                    np.random.uniform(self.center[0][1], self.center[1][1]),
+                )
+        else:
+            angle = np.random.choice(self.angle)
+            if self.center is not None:
+                center = np.random.choice(self.center)
+
+        if center is not None:
+            center = (w * center[0], h * center[1])  # Convert to absolute coordinates
+
+        if angle % 360 == 0:
+            return NoOpTransform()
+
+        return RotationTransform(h, w, angle, expand=self.expand, center=center, interp=self.interp)
 
 
 class RandomCrop(Augmentation):
@@ -258,6 +325,51 @@ class RandomCrop(Augmentation):
             return ch, cw
         else:
             raise NotImplementedError('Unknown crop type {}'.format(self.crop_type))
+
+
+class RandomExtent(Augmentation):
+    """Cropping a random 'subrect' of the source image.
+
+    The subrect can be parameterized to include pixels outside the source image, in which case they
+    will be set to zeros (i.e. black). The size of the output image will vary with the size of the
+    random subrect.
+    """
+
+    def __init__(self, scale_range: Tuple[float, float], shift_range: Tuple[float, float]) -> None:
+        """
+        Args:
+            scale_range: Range of input-to-output size scaling factor.
+            shift_range: Range of shifts of the cropped subrect. The rect is shifted by
+                [w / 2 * Uniform(-x, x), h / 2 * Uniform(-y, y)], where (w, h) is the
+                (width, height) of the input image. Set each component to zero to crop at the
+                image's center.
+        """
+        super(RandomExtent, self).__init__()
+
+        self.scale_range = scale_range
+        self.shift_range = shift_range
+
+    def get_transform(self, image: np.ndarray) -> Transform:
+        h, w = image.shape[:2]
+
+        # Initialize src_rect to fit the input image.
+        src_rect = np.array([-0.5 * w, -0.5 * h, 0.5 * w, 0.5 * h])
+
+        # Apply a random scaling to the src_rect.
+        src_rect *= np.random.uniform(self.scale_range[0], self.scale_range[1])
+
+        # Apply a random shift to the coordinates origin.
+        src_rect[0::2] += self.shift_range[0] * w * (np.random.rand() - 0.5)
+        src_rect[1::2] += self.shift_range[1] * h * (np.random.rand() - 0.5)
+
+        # Map src_rect coordinates into image coordinates (center at corner).
+        src_rect[0::2] += 0.5 * w
+        src_rect[1::2] += 0.5 * h
+
+        return ExtentTransform(
+            src_rect=(src_rect[0], src_rect[1], src_rect[2], src_rect[3]),
+            output_size=(int(src_rect[3] - src_rect[1]), int(src_rect[2] - src_rect[0])),
+        )
 
 
 class RandomContrast(Augmentation):
@@ -371,117 +483,5 @@ class RandomLighting(Augmentation):
         return BlendTransform(
             src_image=self.eigen_vecs.dot(weights * self.eigen_vals),
             src_weight=1.0,
-            dst_weight=1.0,
-        )
-
-
-class RandomRotation(Augmentation):
-    """Rotating the image a few random degrees counter clockwise around the given center."""
-
-    def __init__(
-        self,
-        angle: Union[List[float], float],
-        expand: bool = True,
-        center: Optional[List[Tuple[float, float]]] = None,
-        sample_style: str = 'range',
-        interp: str = 'bilinear'
-    ) -> None:
-        """
-        Args:
-            angle: If `sample_style=='range'`, a [min, max] interval from which to sample the angle
-                (in degrees). If `sample_style=='choice'`, a list of angles to sample from.
-            expand: Choose if the image should be resized to fit the whole rotated image (default),
-                or simply cropped
-            center: If `sample_style=='range'`, a [[minx, miny], [maxx, maxy]] relative interval
-                from which to sample the center, [0, 0] being the top left of the image and [1, 1]
-                the bottom right. If `sample_style=='choice'`, a list of centers to sample from
-                Default: None, which means that the center of rotation is the center of the image
-                center has no effect if expand=True because it only affects shifting.
-            sample_style: Either 'range' or 'choice'.
-            interp: cv2 interpolation method. See :const:`CV2_INTER_CODES` for all options.
-        """
-        super(RandomRotation, self).__init__()
-
-        if sample_style not in ['range', 'choice']:
-            raise ValueError('sample_type should be range or choice. Got {}'.format(sample_style))
-        if center is not None and (np.max(center) > 1.0 or np.min(center) < 0.0):
-            raise ValueError('center should have value in range [0.0, 1.0].')
-
-        if isinstance(angle, (float, int)):
-            angle = (angle, angle)
-        if center is not None and isinstance(center[0], (float, int)):
-            center = (center, center)
-
-        self.angle = angle
-        self.expand = expand
-        self.center = center
-        self.sample_style = sample_style
-        self.interp = interp
-
-    def get_transform(self, image: np.ndarray) -> Transform:
-        h, w = image.shape[:2]
-        center = None
-        if self.sample_style == 'range':
-            angle = np.random.uniform(self.angle[0], self.angle[1])
-            if self.center is not None:
-                center = (
-                    np.random.uniform(self.center[0][0], self.center[1][0]),
-                    np.random.uniform(self.center[0][1], self.center[1][1]),
-                )
-        else:
-            angle = np.random.choice(self.angle)
-            if self.center is not None:
-                center = np.random.choice(self.center)
-
-        if center is not None:
-            center = (w * center[0], h * center[1])  # Convert to absolute coordinates
-
-        if angle % 360 == 0:
-            return NoOpTransform()
-
-        return RotationTransform(h, w, angle, expand=self.expand, center=center, interp=self.interp)
-
-
-class RandomExtent(Augmentation):
-    """Cropping a random 'subrect' of the source image.
-
-    The subrect can be parameterized to include pixels outside the source image, in which case they
-    will be set to zeros (i.e. black). The size of the output image will vary with the size of the
-    random subrect.
-    """
-
-    def __init__(self, scale_range: Tuple[float, float], shift_range: Tuple[float, float]) -> None:
-        """
-        Args:
-            scale_range: Range of input-to-output size scaling factor.
-            shift_range: Range of shifts of the cropped subrect. The rect is shifted by
-                [w / 2 * Uniform(-x, x), h / 2 * Uniform(-y, y)], where (w, h) is the
-                (width, height) of the input image. Set each component to zero to crop at the
-                image's center.
-        """
-        super(RandomExtent, self).__init__()
-
-        self.scale_range = scale_range
-        self.shift_range = shift_range
-
-    def get_transform(self, image: np.ndarray) -> Transform:
-        h, w = image.shape[:2]
-
-        # Initialize src_rect to fit the input image.
-        src_rect = np.array([-0.5 * w, -0.5 * h, 0.5 * w, 0.5 * h])
-
-        # Apply a random scaling to the src_rect.
-        src_rect *= np.random.uniform(self.scale_range[0], self.scale_range[1])
-
-        # Apply a random shift to the coordinates origin.
-        src_rect[0::2] += self.shift_range[0] * w * (np.random.rand() - 0.5)
-        src_rect[1::2] += self.shift_range[1] * h * (np.random.rand() - 0.5)
-
-        # Map src_rect coordinates into image coordinates (center at corner).
-        src_rect[0::2] += 0.5 * w
-        src_rect[1::2] += 0.5 * h
-
-        return ExtentTransform(
-            src_rect=(src_rect[0], src_rect[1], src_rect[2], src_rect[3]),
-            output_size=(int(src_rect[3] - src_rect[1]), int(src_rect[2] - src_rect[0])),
+            dst_weight=1.0
         )
