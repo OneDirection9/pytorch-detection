@@ -1,4 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+#
+# Modified by: Zhipeng Han
 from typing import List
 
 import torch
@@ -12,27 +14,35 @@ from det.layers import Conv2d, ShapeSpec, cat, get_norm
 from det.structures import Instances
 
 __all__ = [
+    'RoIMaskHeadRegistry',
+    'build_mask_head',
     'BaseMaskRCNNHead',
     'MaskRCNNConvUpsampleHead',
-    'build_mask_head',
-    'ROI_MASK_HEAD_REGISTRY',
 ]
 
-ROI_MASK_HEAD_REGISTRY = Registry('ROI_MASK_HEAD')
-ROI_MASK_HEAD_REGISTRY.__doc__ = """
-Registry for mask heads, which predicts instance masks given
-per-region features.
 
-The registered object will be called with `obj(cfg, input_shape)`.
-"""
+class RoIMaskHeadRegistry(Registry):
+    """Registry for mask heads, which predicts instance masks given per-region features.
 
+    The registered object must be a callable that accepts two arguments:
 
-def build_mask_head(cfg, input_shape):
+    1. cfg: A :class:`CfgNode`
+    2. input_shape: A :class:`ShapeSpec`, which contains the input shape specification
+
+    It will be called with `obj.from_config(cfg, input_shape)` or `obj(cfg, input_shape)`.
     """
-    Build a mask head defined by `cfg.MODEL.ROI_MASK_HEAD.NAME`.
-    """
-    name = cfg.MODEL.ROI_MASK_HEAD.NAME
-    return ROI_MASK_HEAD_REGISTRY.get(name)(cfg, input_shape)
+    pass
+
+
+def build_mask_head(cfg: CfgNode, input_shape: ShapeSpec) -> nn.Module:
+    """Builds a mask head from `cfg.MODEL.ROI_MASK_HEAD.NAME`."""
+    mask_head_name = cfg.MODEL.ROI_MASK_HEAD.NAME
+    mask_head_cls = RoIMaskHeadRegistry.get(mask_head_name)
+    if hasattr(mask_head_cls, 'from_config'):
+        mask_head = mask_head_cls.from_config(cfg, input_shape)
+    else:
+        mask_head = mask_head_cls(cfg, input_shape)
+    return mask_head
 
 
 def mask_rcnn_loss(pred_mask_logits, instances, vis_period=0):
@@ -206,7 +216,7 @@ class BaseMaskRCNNHead(nn.Module):
         raise NotImplementedError
 
 
-@ROI_MASK_HEAD_REGISTRY.register()
+@RoIMaskHeadRegistry.register('MaskRCNNConvUpsampleHead')
 class MaskRCNNConvUpsampleHead(BaseMaskRCNNHead):
     """
     A mask head with several conv layers, plus an upsample layer (with `ConvTranspose2d`).
@@ -261,20 +271,20 @@ class MaskRCNNConvUpsampleHead(BaseMaskRCNNHead):
             nn.init.constant_(self.predictor.bias, 0)
 
     @classmethod
-    def from_config(cls, cfg: CfgNode, input_shape: ShapeSpec):
-        ret = super().from_config(cfg, input_shape)
+    def from_config(cls, cfg: CfgNode, input_shape: ShapeSpec) -> 'MaskRCNNConvUpsampleHead':
+        if cfg.MODEL.ROI_MASK_HEAD.CLS_AGNOSTIC_MASK:
+            num_classes = 1
+        else:
+            num_classes = cfg.MODEL.ROI_HEADS.NUM_CLASSES
         conv_dim = cfg.MODEL.ROI_MASK_HEAD.CONV_DIM
         num_conv = cfg.MODEL.ROI_MASK_HEAD.NUM_CONV
-        ret.update(
+        return cls(
+            input_shape,
+            num_classes=num_classes,
             conv_dims=[conv_dim] * (num_conv + 1),  # +1 for ConvTranspose
             conv_norm=cfg.MODEL.ROI_MASK_HEAD.NORM,
-            input_shape=input_shape,
+            vis_period=cfg.VIS_PERIOD,
         )
-        if cfg.MODEL.ROI_MASK_HEAD.CLS_AGNOSTIC_MASK:
-            ret['num_classes'] = 1
-        else:
-            ret['num_classes'] = cfg.MODEL.ROI_HEADS.NUM_CLASSES
-        return ret
 
     def layers(self, x):
         for layer in self.conv_norm_relus:

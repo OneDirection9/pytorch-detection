@@ -13,7 +13,7 @@ from torch.nn import functional as F
 from det.config import CfgNode
 from det.layers import Conv2d, ShapeSpec, get_norm
 
-__all__ = ['FastRCNNConvFCHead', 'build_box_head', 'RoIBoxHeadRegistry']
+__all__ = ['RoIBoxHeadRegistry', 'build_box_head', 'FastRCNNConvFCHead']
 
 
 class RoIBoxHeadRegistry(Registry):

@@ -352,8 +352,12 @@ class RPN(nn.Module):
 
         # Log the number of positive/negative anchors per-image that's used in training
         pos_mask = gt_labels == 1
+        # TODO: add storage
         # num_pos_anchors = pos_mask.sum().item()
         # num_neg_anchors = (gt_labels == 0).sum().item()
+        # storage = get_event_storage()
+        # storage.put_scalar("rpn/num_pos_anchors", num_pos_anchors / num_images)
+        # storage.put_scalar("rpn/num_neg_anchors", num_neg_anchors / num_images
 
         if self._box_reg_loss_type == 'smooth_l1':
             anchors = type(anchors[0]).cat(anchors).tensor  # Ax(4 or 5)
