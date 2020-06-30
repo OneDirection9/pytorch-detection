@@ -5,7 +5,7 @@ from __future__ import absolute_import, division, print_function
 
 import copy
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 import torch
@@ -68,7 +68,7 @@ class DatasetMapper(object):
         self,
         *,
         augmentation: List[T.Augmentation],
-        crop: Optional[T.RandomCrop] = None,
+        compute_tight_boxes: bool,
         image_format: str = 'BGR',
         mask_on: bool = False,
         mask_format: str = 'polygon',
@@ -79,7 +79,7 @@ class DatasetMapper(object):
         """
         Args:
             augmentation: List of augmentation.
-            crop: RandomCrop.
+            compute_tight_boxes: Where creating a tight box around mask.
             image_format: See :class:`read_image`.
             mask_on: Whether keep segmentation.
             mask_format: See :func:`annotations_to_instances`.
@@ -88,7 +88,7 @@ class DatasetMapper(object):
             training: Whether in training mode.
         """
         self.augmentation = augmentation
-        self.crop = crop
+        self.compute_tight_boxes = compute_tight_boxes
         self.image_format = image_format
         self.mask_on = mask_on
         self.mask_format = mask_format
@@ -106,12 +106,15 @@ class DatasetMapper(object):
             'training': training,
         }
 
+        augmentation = build_augmentation(cfg, training)
         if cfg.INPUT.CROP.ENABLED and training:
-            crop = T.RandomCrop(cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE)
-            logger.info('RandomCrop used in training: {}'.format(crop))
-            kwargs['crop'] = crop
-
-        kwargs['augmentation'] = build_augmentation(cfg, training)
+            augmentation.insert(0, T.RandomCrop(cfg.INPUT.CROP.TYPE, cfg.INPUT.CROP.SIZE))
+            logger.info('RandomCrop used in training: {}'.format(augmentation[0]))
+            compute_tight_boxes = True
+        else:
+            compute_tight_boxes = False
+        kwargs['augmentation'] = augmentation
+        kwargs['compute_tight_boxes'] = compute_tight_boxes
 
         if cfg.MODEL.KEYPOINT_ON and training:
             vision_datasets = build_vision_datasets(cfg.DATASETS.TRAIN)
@@ -132,28 +135,23 @@ class DatasetMapper(object):
         image = utils.read_image(dataset_dict['file_name'], self.image_format)
         utils.check_image_size(dataset_dict, image)
 
-        if not dataset_dict.get('annotations', []):
-            image, transforms = T.apply_augmentations(
-                ([self.crop] if self.crop else []) + self.augmentation, image
-            )
+        # USER: Remove if you don't do semantic/panoptic segmentation.
+        if 'sem_seg_file_name' in dataset_dict:
+            sem_seg_gt = utils.read_image(dataset_dict.pop('sem_seg_file_name'), 'L').squeeze(2)
         else:
-            # Crop around an instance if there are instances in the image
-            if self.crop:
-                crop_tfm = utils.gen_crop_transform_with_instance(
-                    self.crop.get_crop_size(image.shape[:2]), image.shape[:2],
-                    np.random.choice(dataset_dict['annotations'])
-                )
-                image = crop_tfm.apply_image(image)
-            image, transforms = T.apply_augmentations(self.augmentation, image)
-            if self.crop:
-                transforms = crop_tfm + transforms
+            sem_seg_gt = None
+
+        aug_input = T.StandardAugInput(image, sem_seg=sem_seg_gt)
+        transforms = aug_input.apply_augmentations(self.augmentation)
+        image, sem_seg_gt = aug_input.image, aug_input.sem_seg
 
         image_shape = image.shape[:2]  # HxW
-
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.
         dataset_dict['image'] = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
+        if sem_seg_gt is not None:
+            dataset_dict['sem_seg'] = torch.as_tensor(sem_seg_gt.astype('long'))
 
         if not self.training:
             dataset_dict.pop('annotations', None)
@@ -184,13 +182,7 @@ class DatasetMapper(object):
             # cropped by a box [(1,0),(2,2)] (XYXY format). The tight bounding box of the cropped
             # triangle should be [(1,0),(2,1)], which is not equal to the intersection of original
             # bounding box and the cropping box.
-            if self.crop and instances.has('gt_masks'):
+            if self.compute_tight_boxes and instances.has('gt_masks'):
                 instances.gt_boxes = instances.gt_masks.get_bounding_boxes()
             dataset_dict['instances'] = utils.filter_empty_instances(instances)
-
-        if 'sem_seg_file_name' in dataset_dict:
-            sem_seg_gt = utils.read_image(dataset_dict.pop('sem_seg_file_name'), 'L').squeeze(2)
-            sem_seg_gt = transforms.apply_segmentation(sem_seg_gt)
-            sem_seg_gt = torch.as_tensor(sem_seg_gt.astype('long'))
-            dataset_dict['sem_seg'] = sem_seg_gt
         return dataset_dict
